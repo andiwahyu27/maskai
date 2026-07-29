@@ -434,25 +434,54 @@ def process(msg):
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
-        send(chat_id, "⏳ Sinkronisasi ke spreadsheet...")
-        # Fetch all transactions with categories
-        txs = supabase_get("maskai_transactions", {
-            "select": "id,type,amount,description,transaction_dt,category_id",
-            "order": "id.asc"
-        })
-        cats = {c["id"]: c for c in supabase_get("maskai_categories", {"select": "id,name"})}
-        if not txs:
-            send(chat_id, "❌ Tidak ada transaksi untuk disinkron.")
-            return
-        # Save CSV locally
-        csv_path = "/tmp/maskai_sync.csv"
-        with open(csv_path, "w") as f:
-            f.write("ID,Type,Amount,Category,Description,Date\n")
+        send(chat_id, "⏳ Sinkronisasi ke Google Sheets...")
+        try:
+            import gspread
+            from oauth2client.service_account import ServiceAccountCredentials
+            
+            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+            creds = ServiceAccountCredentials.from_json_keyfile_name("/home/ubuntu/maskai/service-account.json", scope)
+            client = gspread.authorize(creds)
+            
+            sheet_id = "1dBkYHEGsftjqH2NA9bd5EJ58Cc_HYKt8rVoWk0RdQUg"
+            sheet = client.open_by_key(sheet_id).sheet1
+            
+            # Fetch all transactions
+            txs = supabase_get("maskai_transactions", {
+                "select": "id,type,amount,description,transaction_dt,category_id",
+                "order": "id.asc"
+            })
+            cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
+            
+            if not txs:
+                send(chat_id, "❌ Tidak ada transaksi.")
+                return
+            
+            # Clear and rewrite
+            sheet.clear()
+            sheet.append_row(["ID", "Jenis", "Jumlah", "Kategori", "Deskripsi", "Tanggal"])
+            
+            rows = []
             for t in txs:
-                cat_name = cats.get(t["category_id"], {}).get("name", "-")
-                f.write(f"{t['id']},{t['type']},{t['amount']},{cat_name},\"{t.get('description','-')}\",{t['transaction_dt'][:10]}\n")
-        count = len(txs)
-        send(chat_id, f"✅ *Sync selesai*\n{count} transaksi diekspor ke CSV\n📄 /tmp/maskai_sync.csv\n\n⚠️ Google Sheets sync butuh setup tambahan. Hubungi admin.", parse_mode="Markdown")
+                rows.append([
+                    str(t["id"]),
+                    "Pemasukan" if t["type"] == "I" else "Pengeluaran",
+                    t["amount"],
+                    cats.get(t.get("category_id"), "-"),
+                    t.get("description", "-"),
+                    t["transaction_dt"][:10]
+                ])
+            
+            # Batch append (max 1000 per batch)
+            for i in range(0, len(rows), 500):
+                sheet.append_rows(rows[i:i+500])
+            
+            count = len(txs)
+            send(chat_id, f"✅ *Sync selesai!*\n{count} transaksi → Google Sheets\n📊 https://docs.google.com/spreadsheets/d/{sheet_id}", parse_mode="Markdown")
+            
+        except Exception as e:
+            log.error(f"Sync error: {e}")
+            send(chat_id, f"❌ Gagal sync: {e}")
     elif cmd == "/resetdb":
         if user_id not in ADMIN_IDS:
             send(chat_id, "❌ Hanya admin yang bisa.")
