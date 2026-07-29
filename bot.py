@@ -403,7 +403,41 @@ def process(msg):
         cmd_laporan(chat_id, user_id, args)
     elif cmd == "/status":
         uptime = time.strftime("%Hh %Mm", time.gmtime(time.time() - BOT_START_TIME))
-        send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5", parse_mode="Markdown")
+        # Count DB rows
+        db = {}
+        for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
+            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+            db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+        send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 *Database:*\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="Markdown")
+    elif cmd == "/cekdb":
+        send(chat_id, "⏳ Cek database...")
+        rows = []
+        for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories","maskai_balance"]:
+            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+            ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+            rows.append(f"  {t}: {ct} rows")
+        total = "\n".join(rows)
+        send(chat_id, f"💾 *MASKAI Database*\n{total}", parse_mode="Markdown")
+    elif cmd == "/sync":
+        send(chat_id, "⏳ Sinkronisasi ke spreadsheet...")
+        # Fetch all transactions with categories
+        txs = supabase_get("maskai_transactions", {
+            "select": "id,type,amount,description,transaction_dt,category_id",
+            "order": "id.asc"
+        })
+        cats = {c["id"]: c for c in supabase_get("maskai_categories", {"select": "id,name"})}
+        if not txs:
+            send(chat_id, "❌ Tidak ada transaksi untuk disinkron.")
+            return
+        # Save CSV locally
+        csv_path = "/tmp/maskai_sync.csv"
+        with open(csv_path, "w") as f:
+            f.write("ID,Type,Amount,Category,Description,Date\n")
+            for t in txs:
+                cat_name = cats.get(t["category_id"], {}).get("name", "-")
+                f.write(f"{t['id']},{t['type']},{t['amount']},{cat_name},\"{t.get('description','-')}\",{t['transaction_dt'][:10]}\n")
+        count = len(txs)
+        send(chat_id, f"✅ *Sync selesai*\n{count} transaksi diekspor ke CSV\n📄 /tmp/maskai_sync.csv\n\n⚠️ Google Sheets sync butuh setup tambahan. Hubungi admin.", parse_mode="Markdown")
     elif cmd == "/resetdb":
         if user_id not in ADMIN_IDS:
             send(chat_id, "❌ Hanya admin yang bisa.")
