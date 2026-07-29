@@ -1,0 +1,7 @@
+.env
+n8n-data/
+backup/
+creds/
+__pycache__/
+*.pyc
+*.pyo
