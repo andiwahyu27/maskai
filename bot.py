@@ -363,7 +363,29 @@ Aturan:
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
     send(chat_id, f"✅ *{label}*\nRp {amount:,.0f}\n{desc}\nKategori: {cat_name}", parse_mode="Markdown")
 
-# ── Router ──
+def cmd_usage(chat_id):
+    """Show Supabase usage stats"""
+    send(chat_id, "⏳ Cek usage Supabase...")
+    tables = {
+        "maskai_transactions": "Transaksi",
+        "maskai_debts": "Hutang/Piutang",
+        "maskai_keranjang": "Keranjang",
+        "maskai_categories": "Kategori",
+        "maskai_balance": "Saldo"
+    }
+    total_rows = 0
+    msg = "📊 *Supabase Usage*\n\n"
+    for t, label in tables.items():
+        r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
+            headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+        ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+        total_rows += int(ct) if ct.isdigit() else 0
+        msg += f"  {label}: {ct}\n"
+    est_size_mb = (total_rows * 0.5) / 1024
+    msg += f"\n📦 *Estimasi:*\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
+    send(chat_id, msg, parse_mode="Markdown")
+
+# ── Command Router ──
 
 def process(msg):
     chat_id = msg.get("chat", {}).get("id")
@@ -409,15 +431,8 @@ def process(msg):
             r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
             db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
         send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 *Database:*\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="Markdown")
-    elif cmd == "/cekdb":
-        send(chat_id, "⏳ Cek database...")
-        rows = []
-        for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories","maskai_balance"]:
-            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
-            ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-            rows.append(f"  {t}: {ct} rows")
-        total = "\n".join(rows)
-        send(chat_id, f"💾 *MASKAI Database*\n{total}", parse_mode="Markdown")
+    elif cmd in ("/usage", "/cekdb"):
+        cmd_usage(chat_id)
     elif cmd == "/sync":
         send(chat_id, "⏳ Sinkronisasi ke spreadsheet...")
         # Fetch all transactions with categories
