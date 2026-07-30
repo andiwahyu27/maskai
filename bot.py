@@ -67,12 +67,6 @@ class ApiResult:
     status: int = 0
     data: Any = None
     error: Optional[str] = None
-    
-    def __iter__(self):
-        """Transitional: iterates .data for backward compat. Migrate to .data."""
-        if isinstance(self.data, list):
-            return iter(self.data)
-        return iter([])
 
 def api_get(url, **kw):
     """Safe GET with typed result"""
@@ -305,22 +299,24 @@ def cmd_laporan(chat_id, user_id, text):
             since = f"{d1}T00:00:00"
             next_day = (datetime.strptime(d2, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
             until = f"{next_day}T00:00:00"
-            txs = supabase_get("maskai_transactions", [
+            tx_result = supabase_get("maskai_transactions", [
                 ("user_id", f"eq.{user_id}"),
                 ("transaction_dt", f"gte.{since}"),
                 ("transaction_dt", f"lt.{until}"),
                 ("select", "type,amount,description,transaction_dt,category_id"),
                 ("order", "transaction_dt.desc")
             ])
+            txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
             periode = f"{d1} s/d {d2}"
         except (ValueError, IndexError):
             send(chat_id, "❌ Format: /laporan 2026-07-20 2026-07-28")
             return
     elif len(parts) == 1:  # last 5
-        txs = supabase_get("maskai_transactions", {
+        tx_result = supabase_get("maskai_transactions", {
             "user_id": f"eq.{user_id}", "select": "type,amount,description,transaction_dt,category_id",
             "order": "transaction_dt.desc", "limit": "5"
         })
+        txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
         periode = "Terbaru"
     else:
         cmd = text.lower()
@@ -334,11 +330,12 @@ def cmd_laporan(chat_id, user_id, text):
             start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             periode = "Bulan Ini"
         since = start.isoformat()
-        txs = supabase_get("maskai_transactions", {
+        tx_result = supabase_get("maskai_transactions", {
             "user_id": f"eq.{user_id}", "transaction_dt": f"gte.{since}",
             "select": "type,amount,description,transaction_dt,category_id",
             "order": "transaction_dt.desc"
         })
+        txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
 
     if not txs:
         send(chat_id, f"📊 <b>Laporan {periode}</b>\n\nBelum ada transaksi.", parse_mode="HTML")
@@ -782,10 +779,11 @@ def process(msg, update_id=None):
             sheet = client.open_by_key(sheet_id).sheet1
             
             # Fetch all transactions
-            txs = supabase_get("maskai_transactions", {
+            tx_result = supabase_get("maskai_transactions", {
                 "select": "id,type,amount,description,transaction_dt,created_at,category_id",
                 "order": "id.asc"
             })
+            txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
             cat_result = supabase_get("maskai_categories", {"select": "id,name"})
             cat_list = cat_result.data if cat_result.ok and isinstance(cat_result.data, list) else []
             cats = {c["id"]: c["name"] for c in cat_list}
