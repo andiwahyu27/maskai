@@ -8,11 +8,21 @@
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         body{background:#111827;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-        nav{background:#1f2937;border-bottom:1px solid #374151;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
-        nav .brand{font-size:1.25rem;font-weight:700}
-        nav .links{display:flex;gap:8px}
-        nav .links a{padding:4px 12px;border-radius:6px;text-decoration:none;color:#9ca3af;font-size:.9rem}
-        nav .links a:hover,.nav-active{background:#374151;color:#fff}
+        nav{background:#1f2937;border-bottom:1px solid #374151;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+        nav .brand{font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:8px}
+        nav .brand svg{width:28px;height:28px}
+        nav .links{display:flex;gap:4px;align-items:center}
+        nav .links a,nav .links button{padding:8px 12px;border-radius:8px;text-decoration:none;color:#9ca3af;font-size:.9rem;border:none;background:none;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .15s}
+        nav .links a:hover,nav .links button:hover,.nav-active{background:#374151;color:#fff}
+        nav .links a svg,nav .links button svg{width:18px;height:18px;opacity:.7}
+        .dropdown{position:relative}
+        .dropdown-menu{display:none;position:absolute;right:0;top:100%;margin-top:8px;background:#1f2937;border:1px solid #374151;border-radius:8px;min-width:150px;z-index:50;box-shadow:0 10px 25px rgba(0,0,0,.5)}
+        .dropdown-menu.show{display:block}
+        .dropdown-menu a{display:block;padding:10px 16px;color:#e5e7eb;text-decoration:none;font-size:.9rem;border-radius:0}
+        .dropdown-menu a:hover{background:#374151}
+        .dropdown-menu a:first-child{border-radius:8px 8px 0 0}
+        .dropdown-menu a:last-child{border-radius:0 0 8px 8px}
+        .dropdown-menu a.text-red{color:#f87171}
         main{padding:16px;max-width:900px;margin:0 auto}
         h2{font-size:1.5rem;font-weight:700;margin-bottom:16px}
         .card{background:#1f2937;border-radius:8px;padding:16px}
@@ -43,20 +53,54 @@
         @media(max-width:640px){.grid4{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
     </style>
 </head>
-<body>
+<body x-data="{ accountOpen: false }" @click.outside="accountOpen = false">
     <nav>
-        <span class="brand">🤖 MASKAI</span>
+        <span class="brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+            MASKAI
+        </span>
         <div class="links">
-            <a href="/" class="{% if request.path == '/' %}nav-active{% endif %}">🏠</a>
-            <a href="/transactions" class="{% if request.path == '/transactions' %}nav-active{% endif %}">💰</a>
-            <a href="/categories" class="{% if request.path == '/categories' %}nav-active{% endif %}">📋</a>
-            <a href="/settings" class="{% if request.path == '/settings' %}nav-active{% endif %}">⚙️</a>
-            <a href="/logs" class="{% if request.path == '/logs' %}nav-active{% endif %}">📜</a>
-            <a href="/logout" style="color:#f87171">🚪</a>
+            <a href="/" class="{% if request.path == '/' %}nav-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span class="hide-mobile">Home</span>
+            </a>
+            <a href="/transactions" class="{% if request.path == '/transactions' %}nav-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                <span class="hide-mobile">Transaksi</span>
+            </a>
+            <a href="/categories" class="{% if request.path == '/categories' %}nav-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <span class="hide-mobile">Kategori</span>
+            </a>
+            <a href="/settings" class="{% if request.path == '/settings' %}nav-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                <span class="hide-mobile">Settings</span>
+            </a>
+            <a href="/logs" class="{% if request.path == '/logs' %}nav-active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 17"/><line x1="12" y1="12" x2="20" y2="12"/></svg>
+                <span class="hide-mobile">Logs</span>
+            </a>
+
+            <!-- Account dropdown -->
+            <div class="dropdown">
+                <button @click="accountOpen = !accountOpen" :class="accountOpen ? 'nav-active' : ''">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </button>
+                <div class="dropdown-menu" :class="{ show: accountOpen }" @click="accountOpen = false">
+                    <a href="/logout" class="text-red">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;vertical-align:middle"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Logout
+                    </a>
+                </div>
+            </div>
         </div>
     </nav>
     <main>
         {% block content %}{% endblock %}
     </main>
+    <style>
+        .hide-mobile{display:inline}
+        @media(max-width:640px){.hide-mobile{display:none}}
+    </style>
 </body>
 </html>
