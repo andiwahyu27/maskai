@@ -321,6 +321,15 @@ def require_api_key(f):
         return f(*args, **kw)
     return wrap
 
+@app.route("/openapi.json")
+def serve_openapi():
+    """Serve OpenAPI spec for Custom GPT Actions"""
+    path = "/home/ubuntu/maskai/docs/openapi.json"
+    if os.path.exists(path):
+        with open(path) as f:
+            return jsonify(json.load(f))
+    abort(404)
+
 @app.route("/api/v1/status")
 @require_api_key
 def v1_status():
