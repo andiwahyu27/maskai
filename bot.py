@@ -151,13 +151,45 @@ def supabase_delete(table, field, value):
     r = requests.delete(url, headers=SUPABASE_HEADERS, timeout=10)
     return r.status_code in (200, 204)
 
+def api_patch(url, json=None, **kw):
+    """Safe PATCH with typed result"""
+    try:
+        r = requests.patch(url, json=json, timeout=kw.pop("timeout", 15), **kw)
+        if r.status_code not in (200, 201, 204):
+            log.warning(f"API PATCH {r.status_code}: {r.text[:100]}")
+            return ApiResult(False, status=r.status_code, error=r.text[:200])
+        return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
+    except requests.Timeout:
+        return ApiResult(False, error="timeout")
+    except requests.ConnectionError:
+        return ApiResult(False, error="connection")
+    except ValueError:
+        return ApiResult(False, error="invalid_json")
+    except requests.RequestException as e:
+        return ApiResult(False, error=str(e)[:200])
+
+def api_delete(url, **kw):
+    """Safe DELETE with typed result"""
+    try:
+        r = requests.delete(url, timeout=kw.pop("timeout", 15), **kw)
+        if r.status_code not in (200, 204):
+            log.warning(f"API DELETE {r.status_code}: {r.text[:100]}")
+            return ApiResult(False, status=r.status_code, error=r.text[:200])
+        return ApiResult(True, data={}, status=r.status_code)
+    except requests.Timeout:
+        return ApiResult(False, error="timeout")
+    except requests.ConnectionError:
+        return ApiResult(False, error="connection")
+    except requests.RequestException as e:
+        return ApiResult(False, error=str(e)[:200])
+
 def supabase_patch(table, filters, data):
-    """Supabase PATCH with multiple filters. filters: list of (field, value) tuples"""
+    """Supabase PATCH — uses requests.patch with dual filter"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     if filters:
         q = "&".join(f"{k}=eq.{v}" for k, v in filters)
         url += f"?{q}"
-    result = api_post(url, json=data, headers=SUPABASE_HEADERS)
+    result = api_patch(url, json=data, headers=SUPABASE_HEADERS)
     return result.data if result.ok else None
 
 # ── Category Ownership Helpers ──
@@ -183,24 +215,26 @@ def list_accessible_categories(user_id):
     return (own or []) + (global_cats or [])
 
 def delete_owned_category(cat_id, user_id):
-    """Delete category if user owns it. Returns (ok, error_msg)"""
+    """Delete category if user owns it. Uses id+user_id filter"""
     cat = get_accessible_category(cat_id, user_id)
     if not cat:
         return False, "Kategori tidak ditemukan"
     if cat.get("user_id") == 0:
         return False, "Kategori global tidak bisa dihapus"
-    if not supabase_delete("maskai_categories", "id", cat_id):
+    # Delete with dual filter — extra safety
+    r = api_delete(f"{SUPABASE_URL}/rest/v1/maskai_categories?id=eq.{cat_id}&user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
+    if not r.ok:
         return False, "Gagal menghapus"
     return True, None
 
 def update_owned_category(cat_id, user_id, payload):
-    """Update category if user owns it. Returns (ok, error_msg)"""
+    """Update category if user owns it. Uses id+user_id filter"""
     cat = get_accessible_category(cat_id, user_id)
     if not cat:
         return False, "Kategori tidak ditemukan"
     if cat.get("user_id") == 0:
         return False, "Kategori global tidak bisa diedit"
-    result = supabase_patch("maskai_categories", [("id", cat_id)], payload)
+    result = supabase_patch("maskai_categories", [("id", cat_id), ("user_id", user_id)], payload)
     if not result:
         return False, "Gagal update"
     return True, None
@@ -252,7 +286,7 @@ def cmd_laporan(chat_id, user_id, text):
                 ("order", "transaction_dt.desc")
             ])
             periode = f"{d1} s/d {d2}"
-        except:
+        except (ValueError, IndexError):
             send(chat_id, "❌ Format: /laporan 2026-07-20 2026-07-28")
             return
     elif len(parts) == 1:  # last 5
@@ -443,7 +477,7 @@ def cmd_ocr(chat_id, user_id, file_id):
 
     try:
         data = json.loads(re.sub(r"```json|```", "", content).strip())
-    except:
+    except (json.JSONDecodeError, ValueError):
         log.error(f"OCR parse: {content[:200]}")
         send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
@@ -478,7 +512,7 @@ def cmd_ocr(chat_id, user_id, file_id):
     })
     send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="MarkdownV2")
 
-def cmd_natural(chat_id, user_id, text):
+def cmd_natural(chat_id, user_id, text, update_id=None):
     """Parse natural language input"""
     send(chat_id, "⏳ Memproses...")
     prompt = f"""Parse text keuangan ini ke JSON.
@@ -499,7 +533,7 @@ Aturan:
 
     try:
         data = json.loads(re.sub(r"```json|```", "", result).strip())
-    except:
+    except (json.JSONDecodeError, ValueError):
         send(chat_id, "❌ Gagal parse. Coba lagi.")
         return
 
@@ -533,7 +567,7 @@ Aturan:
         try:
             dt = datetime.strptime(tgl.replace("juli","July").replace("june","June"), "%d %B")
             tgl = dt.strftime(f"{datetime.now().year}-%m-%d")
-        except:
+        except (ValueError, IndexError):
             pass
 
     cats = supabase_get("maskai_categories", {"name": f"ilike.{cat_name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
@@ -543,9 +577,9 @@ Aturan:
         return
 
     supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": tx_type, "amount": amount, "category_id": cat_id,
+        "user_id": user_id, "type": tx_type, "amount": amt, "category_id": cat_id,
         "description": desc, "transaction_dt": tgl, "currency": "IDR",
-        "metadata": json.dumps({"telegram_update_id": update_id}) if update_id else None
+        "metadata": {"telegram_update_id": str(update_id), "source": "natural"} if update_id else None
     })
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
@@ -580,7 +614,7 @@ def handle_pending_date(chat_id, text):
         try:
             dt = datetime.strptime(tgl.replace("juli","July").replace("juni","June").replace("agustus","August"), "%d %B")
             tgl = dt.strftime(f"{datetime.now().year}-%m-%d")
-        except:
+        except (ValueError, IndexError):
             tgl = datetime.now().strftime("%Y-%m-%d")  # fallback
     
     cats = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
@@ -592,7 +626,7 @@ def handle_pending_date(chat_id, text):
     supabase_post("maskai_transactions", {
         "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
         "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
-        "metadata": json.dumps({"telegram_update_id": p.get("update_id")}) if p.get("update_id") else None
+        "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
     })
     
     label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
@@ -718,7 +752,7 @@ def process(msg, update_id=None):
                         wib = dt + timedelta(hours=7)
                         tgl_input = wib.strftime("%Y-%m-%d")
                         waktu_input = wib.strftime("%H:%M:%S")
-                    except:
+                    except (ValueError, IndexError):
                         tgl_input = created[:10] if len(created) >= 10 else "-"
                         waktu_input = created[11:19] if len(created) >= 19 else "-"
                 else:
@@ -762,7 +796,7 @@ def process(msg, update_id=None):
             send(chat_id, "❌ Tidak punya izin.")
     elif text:
         # Natural language input
-        cmd_natural(chat_id, user_id, text)
+        cmd_natural(chat_id, user_id, text, update_id)
 
 # ── Main ──
 
