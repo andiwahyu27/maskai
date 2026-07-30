@@ -67,19 +67,6 @@ class ApiResult:
     status: int = 0
     data: Any = None
     error: Optional[str] = None
-    
-    def __bool__(self):
-        return self.ok
-    
-    def __iter__(self):
-        if isinstance(self.data, list):
-            return iter(self.data)
-        return iter([])
-    
-    def __getitem__(self, idx):
-        if isinstance(self.data, (list, dict)):
-            return self.data[idx]
-        raise IndexError("No data")
 
 def api_get(url, **kw):
     """Safe GET with typed result"""
@@ -208,13 +195,12 @@ def api_delete(url, **kw):
         return ApiResult(False, error=str(e)[:200])
 
 def supabase_patch(table, filters, data):
-    """Supabase PATCH — uses requests.patch with dual filter"""
+    """Supabase PATCH. Returns ApiResult — check .ok"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     if filters:
         q = "&".join(f"{k}=eq.{v}" for k, v in filters)
         url += f"?{q}"
-    result = api_patch(url, json=data, headers=SUPABASE_HEADERS)
-    return result.data if result.ok else None
+    return api_patch(url, json=data, headers=SUPABASE_HEADERS)
 
 # ── Category Ownership Helpers ──
 def get_accessible_category(cat_id, user_id):
@@ -515,7 +501,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         return
 
     try:
-        data = json.loads(re.sub(r"``<code>json|</code>``", "", content).strip())
+        data = json.loads(re.sub(r"```json|```", "", content).strip())
     except (json.JSONDecodeError, ValueError):
         log.error(f"OCR parse: {content[:200]}")
         send(chat_id, "❌ Struk tidak dapat dibaca.")
@@ -570,12 +556,12 @@ Aturan:
 - Jika ada tanggal spesifik (contoh: "kemarin", "28 juli", "minggu lalu"), isi field tanggal. Jika tidak ada, isi null."""
 
     result = claude([{"role": "user", "content": prompt}], 200)
-    if not result.ok:
+    if not result:
         send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• <code>beli telur 20rb</code>\n• <code>gaji 5 juta 28 juli</code>")
         return
 
     try:
-        data = json.loads(re.sub(r"``<code>json|</code>``", "", result).strip())
+        data = json.loads(re.sub(r"```json|```", "", result).strip())
     except (json.JSONDecodeError, ValueError):
         send(chat_id, "❌ Gagal parse. Coba lagi.")
         return
