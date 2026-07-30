@@ -356,7 +356,10 @@ def cmd_debt(chat_id, user_id, text):
     data = {"user_id": user_id, "direction": "O" if is_hutang else "T",
             "counterparty": args[0], "amount": float(args[1]),
             "description": " ".join(args[2:]) or "-", "status": "open", "currency": "IDR"}
-    supabase_post("maskai_debts", data)
+    result = supabase_post("maskai_debts", data)
+    if not result:
+        send(chat_id, "❌ Gagal menyimpan.")
+        return
     label = "Hutang" if is_hutang else "Piutang"
     send(chat_id, f"📝 *{label}*\nRp {float(args[1]):,.0f}\n👤 {args[0]}", parse_mode="MarkdownV2")
 
@@ -366,9 +369,12 @@ def cmd_keranjang(chat_id, user_id, text):
     if not args or not args[0].replace(".","").isdigit():
         send(chat_id, "Format: /keranjang <jumlah> <desk>")
         return
-    supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
+    result = supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
         "description": " ".join(args[1:]) or "-"})
-    send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="MarkdownV2")
+    if result:
+        send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="MarkdownV2")
+    else:
+        send(chat_id, "❌ Gagal menyimpan ke keranjang.")
 
 def cmd_kategori(chat_id, user_id):
     """List categories accessible to user"""
@@ -511,12 +517,15 @@ def cmd_ocr(chat_id, user_id, file_id):
         send(chat_id, "❌ Gagal menyimpan — kategori default tidak ditemukan.")
         return
 
-    supabase_post("maskai_transactions", {
+    result = supabase_post("maskai_transactions", {
         "user_id": user_id, "type": "E", "amount": float(total),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR"
     })
-    send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="MarkdownV2")
+    if result:
+        send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="MarkdownV2")
+    else:
+        send(chat_id, "❌ Gagal menyimpan transaksi.")
 
 def cmd_natural(chat_id, user_id, text, update_id=None):
     """Parse natural language input"""
@@ -582,11 +591,14 @@ Aturan:
         send(chat_id, "❌ Kategori tidak ditemukan.")
         return
 
-    supabase_post("maskai_transactions", {
+    result = supabase_post("maskai_transactions", {
         "user_id": user_id, "type": tx_type, "amount": amt, "category_id": cat_id,
         "description": desc, "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "natural"} if update_id else None
     })
+    if not result:
+        send(chat_id, "❌ Gagal menyimpan transaksi.")
+        return
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
     esc_desc = escape_md(desc)
@@ -629,11 +641,14 @@ def handle_pending_date(chat_id, text):
         send(chat_id, "❌ Kategori tidak ditemukan.")
         return
     
-    supabase_post("maskai_transactions", {
+    result = supabase_post("maskai_transactions", {
         "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
         "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
     })
+    if not result:
+        send(chat_id, "❌ Gagal menyimpan transaksi.")
+        return
     
     label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
     send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{escape_md(p['desc'])}\nKategori: {escape_md(p['cat'])}\n📅 {tgl}", parse_mode="MarkdownV2")
