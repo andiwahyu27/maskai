@@ -67,11 +67,12 @@ async function load() {
     // Recent transactions
     let list = document.getElementById('recent-list');
     if (d.recent && d.recent.length > 0) {
-      let html = '<table class="table w-full"><thead><tr><th>Tgl</th><th class="text-right">Jumlah</th><th>Deskripsi</th></tr></thead><tbody>';
+      let html = '<table class="table w-full"><thead><tr><th>Tgl</th><th class="text-right">Jumlah</th><th>Kat</th><th>Deskripsi</th></tr></thead><tbody>';
       for (let t of d.recent) {
         html += '<tr>' +
           '<td>' + (t.transaction_dt||'').slice(0,10) + '</td>' +
           '<td class="text-right ' + (t.type=='I'?'text-green':'text-red') + '">Rp ' + (t.amount||0).toLocaleString('id-ID') + '</td>' +
+          '<td>' + (t.category_name||'-') + '</td>' +
           '<td class="text-gray">' + (t.description||'-') + '</td>' +
         '</tr>';
       }

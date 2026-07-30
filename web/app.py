@@ -163,13 +163,20 @@ def api_status():
 
     # Recent tx for income/expense calc
     txs = supabase_get("maskai_transactions", {
-        "user_id": "eq.1367356347", "select": "amount,type,transaction_dt",
+        "user_id": "eq.1367356347", "select": "amount,type,transaction_dt,description,category_id",
         "order": "transaction_dt.desc", "limit": "100"
     })
+    
+    # Get category names
+    cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
     
     # Calculate totals
     income = sum(t["amount"] for t in txs if t["type"] == "I")
     expense = sum(t["amount"] for t in txs if t["type"] == "E")
+    
+    # Add category name to recent txs
+    for t in txs:
+        t["category_name"] = cats.get(t.get("category_id"), "-")
     
     # Bot process
     bot_running = os.system("systemctl is-active --quiet maskai-bot.service") == 0

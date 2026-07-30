@@ -319,7 +319,7 @@ def cmd_ocr(chat_id, file_id):
     supabase_post("maskai_transactions", {
         "user_id": 1367356347, "type": "E", "amount": data.get("total", 0),
         "category_id": 8, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
-        "transaction_dt": datetime.utcnow().isoformat(), "currency": "IDR"
+        "transaction_dt": data.get("tanggal", datetime.utcnow().strftime("%Y-%m-%d")), "currency": "IDR"
     })
     send(chat_id, f"🛒 *{data.get('toko','Struk')}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {data.get('items','-')}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
 
@@ -329,16 +329,17 @@ def cmd_natural(chat_id, user_id, text):
     prompt = f"""Parse text keuangan ini ke JSON.
 Text: "{text}"
 
-Return JSON: {{"jenis":"pemasukan" atau "pengeluaran","jumlah":<angka>,"kategori":"...","deskripsi":"..."}}
+Return JSON: {{"jenis":"pemasukan" atau "pengeluaran","jumlah":<angka>,"kategori":"...","deskripsi":"...","tanggal":"YYYY-MM-DD" atau null}}
 
 Aturan:
 - "gaji","bonus","honor","pemasukan","hasil","pendapatan" → pemasukan
 - Selain itu → pengeluaran
-- "20rb" atau "20 ribu" → 20000, "1juta" → 1000000"""
+- "20rb" atau "20 ribu" → 20000, "1juta" → 1000000
+- Jika ada tanggal spesifik (contoh: "kemarin", "28 juli", "minggu lalu"), isi field tanggal. Jika tidak ada, isi null."""
 
     result = claude([{"role": "user", "content": prompt}], 200)
     if not result:
-        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• `beli telur 20rb`\n• `gaji 5 juta`")
+        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• `beli telur 20rb`\n• `gaji 5 juta 28 juli`")
         return
 
     try:
@@ -351,17 +352,70 @@ Aturan:
     amount = data.get("jumlah", 0)
     cat_name = data.get("kategori", "Lainnya")
     desc = data.get("deskripsi", "-")
+    tgl = data.get("tanggal")
+    
+    # If no date provided, ask user
+    if not tgl:
+        # Save pending tx
+        pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id}
+        send(chat_id, f"📅 *Kapan tanggal transaksinya?*\nTulis: `28 juli` atau `kemarin` atau `hari ini`", parse_mode="Markdown")
+        return
+    
+    # Convert relative dates
+    if tgl.lower() in ("hari ini", "today"):
+        tgl = datetime.now().strftime("%Y-%m-%d")
+    elif tgl.lower() in ("kemarin", "yesterday"):
+        tgl = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    # Parse "28 juli" style
+    if not tgl.startswith("20"):
+        try:
+            dt = datetime.strptime(tgl.replace("juli","July").replace("june","June"), "%d %B")
+            tgl = dt.strftime(f"{datetime.now().year}-%m-%d")
+        except:
+            pass
 
     cats = supabase_get("maskai_categories", {"name": f"ilike.{cat_name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
     cat_id = cats[0]["id"] if cats else (9 if tx_type == "I" else 8)
 
     supabase_post("maskai_transactions", {
         "user_id": user_id, "type": tx_type, "amount": amount, "category_id": cat_id,
-        "description": desc, "transaction_dt": datetime.utcnow().isoformat(), "currency": "IDR"
+        "description": desc, "transaction_dt": tgl, "currency": "IDR"
     })
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
-    send(chat_id, f"✅ *{label}*\nRp {amount:,.0f}\n{desc}\nKategori: {cat_name}", parse_mode="Markdown")
+    send(chat_id, f"✅ *{label}*\nRp {amount:,.0f}\n{desc}\nKategori: {cat_name}\n📅 {tgl}", parse_mode="Markdown")
+
+def handle_pending_date(chat_id, text):
+    """Process user's date reply for pending transaction"""
+    if chat_id not in pending:
+        return
+    p = pending.pop(chat_id)
+    
+    # Convert "28 juli" or "hari ini" to YYYY-MM-DD
+    tgl = text.strip().lower()
+    if tgl in ("hari ini", "today", ""):
+        tgl = datetime.now().strftime("%Y-%m-%d")
+    elif tgl == "kemarin":
+        tgl = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        # Try to parse
+        try:
+            dt = datetime.strptime(tgl.replace("juli","July").replace("juni","June").replace("agustus","August"), "%d %B")
+            tgl = dt.strftime(f"{datetime.now().year}-%m-%d")
+        except:
+            tgl = datetime.now().strftime("%Y-%m-%d")  # fallback
+    
+    cats = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
+    cat_id = cats[0]["id"] if cats else (9 if p["type"] == "I" else 8)
+    
+    supabase_post("maskai_transactions", {
+        "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
+        "description": p["desc"], "transaction_dt": tgl, "currency": "IDR"
+    })
+    
+    label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
+    send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{p['desc']}\nKategori: {p['cat']}\n📅 {tgl}", parse_mode="Markdown")
 
 def cmd_usage(chat_id):
     """Show Supabase usage stats"""
@@ -397,6 +451,13 @@ def process(msg):
 
     if photo:
         cmd_ocr(chat_id, photo[-1]["file_id"])
+        return
+
+    if not text: return
+
+    # Check if user has a pending date response
+    if chat_id in pending:
+        handle_pending_date(chat_id, text.strip())
         return
 
     cmd = text.split()[0].lower() if text else ""
