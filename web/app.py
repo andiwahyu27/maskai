@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """MASKAI Dashboard - Flask web interface"""
-from datetime import timedelta
-
 import os, sys, json, time, requests, secrets, hashlib
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, abort
@@ -17,6 +15,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 DAHONO_KEY = os.environ.get("DAHONO_KEY", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "MaskaiAdmin_27")
+API_KEY = os.environ.get("API_KEY", secrets.token_hex(24))
 SUPABASE_HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
 
 # Rate limiting
@@ -311,6 +310,85 @@ def api_restart():
 def log_audit(action, ip):
     with open("/tmp/maskai-web-audit.log", "a") as f:
         f.write(f"{datetime.utcnow().isoformat()} {ip} {action}\n")
+
+# ── V1 API (Custom GPT / External) ──
+def require_api_key(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        key = request.headers.get("X-API-Key") or request.args.get("api_key")
+        if not key or not secrets.compare_digest(key, API_KEY):
+            abort(403)
+        return f(*args, **kw)
+    return wrap
+
+@app.route("/api/v1/status")
+@require_api_key
+def v1_status():
+    uptime = int(time.time() - BOT_START_TIME)
+    bot_running = os.system("systemctl is-active --quiet maskai-bot.service") == 0
+    return jsonify({
+        "bot": "running" if bot_running else "stopped",
+        "uptime_seconds": uptime,
+        "models": {"text": "claude-sonnet-4.5-free", "ocr": "gpt-5.5"},
+        "project": "MASKAI"
+    })
+
+@app.route("/api/v1/logs")
+@require_api_key
+def v1_logs():
+    import subprocess
+    lines = request.args.get("lines", "50")
+    level = request.args.get("level", "ERROR")
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "maskai-bot.service", "--no-pager", "-n", lines],
+            capture_output=True, text=True, timeout=10
+        )
+        logs = result.stdout
+        if level != "all":
+            logs = "\n".join(l for l in logs.split("\n") if level.upper() in l)
+        return jsonify({"logs": logs[-3000:]})
+    except:
+        return jsonify({"logs": "Error reading logs"}), 500
+
+@app.route("/api/v1/files/<path:filepath>")
+@require_api_key
+def v1_files(filepath):
+    # Only allow safe paths
+    safe_dir = "/home/ubuntu/maskai"
+    full_path = os.path.join(safe_dir, filepath)
+    full_path = os.path.normpath(full_path)
+    if not full_path.startswith(safe_dir):
+        abort(403)
+    if not os.path.exists(full_path):
+        abort(404)
+    # Only allow specific file types
+    if not full_path.endswith((".py", ".sql", ".md", ".html", ".json", ".yml", ".yaml", ".sh")):
+        abort(403)
+    with open(full_path) as f:
+        content = f.read()
+    return jsonify({"path": filepath, "content": content, "lines": len(content.split("\n"))})
+
+@app.route("/api/v1/tasks", methods=["POST"])
+@require_api_key
+def v1_tasks():
+    data = request.json or {}
+    task_type = data.get("task_type", "")
+    instruction = data.get("instruction", "")
+    dry_run = data.get("dry_run", True)
+    
+    allowed_types = ["debug", "analyze", "report", "suggest"]
+    if task_type not in allowed_types:
+        return jsonify({"error": f"Invalid task_type. Allowed: {allowed_types}"}), 400
+    
+    log_audit(f"v1_task:{task_type}:{instruction[:80]}", request.remote_addr)
+    
+    return jsonify({
+        "accepted": True,
+        "task_id": secrets.token_hex(6),
+        "dry_run": dry_run,
+        "message": f"Task '{task_type}' received. Dry run: {dry_run}. Review dashboard for execution."
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
