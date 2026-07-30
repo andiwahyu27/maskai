@@ -102,17 +102,22 @@ def claude(messages, max_tokens=500):
     return None
 
 def supabase_get(table, params=None):
-    """Supabase GET"""
+    """Supabase GET. params: dict or list of (k,v) tuples for duplicate keys"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     if params:
-        q = "&".join(f"{k}={v}" for k, v in params.items())
+        if isinstance(params, dict):
+            q = "&".join(f"{k}={v}" for k, v in params.items())
+        else:
+            q = "&".join(f"{k}={v}" for k, v in params)
         url += f"?{q}"
-    return api_get(url, headers=SUPABASE_HEADERS)
+    result = api_get(url, headers=SUPABASE_HEADERS)
+    return result.data if result.ok else []
 
 def supabase_post(table, data):
     """Supabase POST"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
-    return api_post(url, json=data, headers=SUPABASE_HEADERS)
+    result = api_post(url, json=data, headers=SUPABASE_HEADERS)
+    return result.data if result.ok else {}
 
 def supabase_delete(table, field, value):
     """Supabase DELETE"""
@@ -159,11 +164,13 @@ def cmd_laporan(chat_id, user_id, text):
         try:
             d1, d2 = parts[1], parts[2]
             since, until = f"{d1}T00:00:00", f"{d2}T23:59:59"
-            txs = supabase_get("maskai_transactions", {
-                "user_id": f"eq.{user_id}", "transaction_dt": f"gte.{since}",
-                "transaction_dt": f"lte.{until}", "select": "type,amount,description,transaction_dt,category_id",
-                "order": "transaction_dt.desc"
-            })
+            txs = supabase_get("maskai_transactions", [
+                ("user_id", f"eq.{user_id}"),
+                ("transaction_dt", f"gte.{since}"),
+                ("transaction_dt", f"lte.{until}"),
+                ("select", "type,amount,description,transaction_dt,category_id"),
+                ("order", "transaction_dt.desc")
+            ])
             periode = f"{d1} s/d {d2}"
         except:
             send(chat_id, "❌ Format: /laporan 2026-07-20 2026-07-28")
