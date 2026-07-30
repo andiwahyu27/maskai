@@ -5,3 +5,5 @@ creds/
 __pycache__/
 *.pyc
 *.pyo
+service-account.json
+poller.sh
