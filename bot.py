@@ -752,7 +752,18 @@ def process(msg):
 
 def main():
     log.info("MASKAI Bot v2 starting...")
-    offset = int(open(OFFSET_FILE).read().strip()) if os.path.exists(OFFSET_FILE) else 0
+    # Safe offset read — handle empty/corrupt file
+    offset = 0
+    if os.path.exists(OFFSET_FILE):
+        try:
+            content = open(OFFSET_FILE).read().strip()
+            if content:
+                offset = int(content)
+        except (ValueError, OSError) as e:
+            log.warning(f"Corrupt offset file {OFFSET_FILE}: {e}, resetting to 0")
+            offset = 0
+    if "/tmp" in OFFSET_FILE:
+        log.warning("Using /tmp fallback for offset — may be lost on reboot")
     err_count = 0
 
     while True:
@@ -838,10 +849,11 @@ def main():
                 offset = upd["update_id"] + 1
 
             if data.get("result"):
-                with open(OFFSET_FILE, "w") as f:
+                with open(OFFSET_FILE + ".tmp", "w") as f:
                     f.write(str(offset))
+                os.rename(OFFSET_FILE + ".tmp", OFFSET_FILE)
 
-        except Exception as e:
+        except (requests.Timeout, requests.ConnectionError, ValueError, OSError) as e:
             err_count += 1
             log.error(f"Loop error ({err_count}/5): {e}")
             if err_count >= 5: break
