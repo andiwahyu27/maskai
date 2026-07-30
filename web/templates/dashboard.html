@@ -46,13 +46,13 @@
   <!-- Recent -->
   <div x-show="!loading" class="card">
     <h3 style="font-size:1rem;margin-bottom:8px">📋 Transaksi Terbaru</h3>
-    <template x-for="t in data.recent || []" :key="t.id">
+    <template x-for="t in (data && data.recent) || []" :key="t.id || $id('tx')">
       <div class="flex justify-between p2" style="border-bottom:1px solid #374151">
         <span x-text="(t.type=='I'?'📥':'📤')+' Rp '+(t.amount||0).toLocaleString('id-ID')"></span>
         <span class="text-gray text-sm" x-text="(t.transaction_dt||'').slice(0,10)"></span>
       </div>
     </template>
-    <div x-show="data.recent && data.recent.length==0" class="text-gray text-center p4">
+    <div x-show="!data || !data.recent || data.recent.length==0" class="text-gray text-center p4">
       Belum ada transaksi
     </div>
   </div>
@@ -65,8 +65,10 @@ function dashboard(){return{
   toast:{show:false,msg:'',ok:true},
   async init(){await this.loadData()},
   async loadData(){
-    try{let r=await fetch('/api/status');if(!r.ok)throw new Error('API error');this.data=await r.json()}
-    catch(e){console.error(e)}this.loading=false
+    try{let r=await fetch('/api/status');if(!r.ok)throw new Error('API error '+r.status);this.data=await r.json();
+      console.log('Dashboard loaded:', this.data)}
+    catch(e){console.error('Dashboard error:', e)}
+    this.loading=false
   },
   async sync(){
     this.toast={show:true,msg:'⏳ Menyinkronkan ke Google Sheets...',ok:true};
