@@ -67,6 +67,12 @@ class ApiResult:
     status: int = 0
     data: Any = None
     error: Optional[str] = None
+    
+    def __iter__(self):
+        """Transitional: iterates .data for backward compat. Migrate to .data."""
+        if isinstance(self.data, list):
+            return iter(self.data)
+        return iter([])
 
 def api_get(url, **kw):
     """Safe GET with typed result"""
@@ -208,7 +214,10 @@ def supabase_patch(table, filters, data):
 # ── Category Ownership Helpers ──
 def get_accessible_category(cat_id, user_id):
     """Get category if user can access it (global or owned)"""
-    cats = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,name,icon,type,user_id"})
+    result = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,name,icon,type,user_id"})
+    if not result.ok:
+        return None
+    cats = result.data if isinstance(result.data, list) else []
     if not cats:
         return None
     cat = cats[0]
@@ -223,9 +232,11 @@ def is_category_owner(cat, user_id):
 def list_accessible_categories(user_id):
     """List categories visible to user: own + global"""
     # Use two queries — Supabase doesn't support OR
-    own = supabase_get("maskai_categories", {"user_id": f"eq.{user_id}", "select": "id,name,icon,type,user_id"})
-    global_cats = supabase_get("maskai_categories", {"user_id": "eq.0", "select": "id,name,icon,type,user_id"})
-    return (own or []) + (global_cats or [])
+    r1 = supabase_get("maskai_categories", {"user_id": f"eq.{user_id}", "select": "id,name,icon,type,user_id"})
+    r2 = supabase_get("maskai_categories", {"user_id": "eq.0", "select": "id,name,icon,type,user_id"})
+    own = r1.data if r1.ok and isinstance(r1.data, list) else []
+    global_cats = r2.data if r2.ok and isinstance(r2.data, list) else []
+    return own + global_cats
 
 def delete_owned_category(cat_id, user_id):
     """Delete category if user owns it. Uses id+user_id filter"""
@@ -333,7 +344,9 @@ def cmd_laporan(chat_id, user_id, text):
         send(chat_id, f"📊 <b>Laporan {periode}</b>\n\nBelum ada transaksi.", parse_mode="HTML")
         return
 
-    cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
+    cat_result = supabase_get("maskai_categories", {"select": "id,name"})
+    cat_list = cat_result.data if cat_result.ok and isinstance(cat_result.data, list) else []
+    cats = {c["id"]: c["name"] for c in cat_list}
 
     income = sum(t["amount"] for t in txs if t["type"] == "I")
     expense = sum(t["amount"] for t in txs if t["type"] == "E")
@@ -356,7 +369,8 @@ def cmd_laporan(chat_id, user_id, text):
     send(chat_id, msg, parse_mode="HTML")
 
 def cmd_saldo(chat_id, user_id):
-    bal = supabase_get("maskai_balance", {"user_id": f"eq.{user_id}", "select": "balance"})
+    result = supabase_get("maskai_balance", {"user_id": f"eq.{user_id}", "select": "balance"})
+    bal = result.data if result.ok and isinstance(result.data, list) else []
     amount = bal[0]["balance"] if bal else 0
     send(chat_id, f"💰 <b>Saldo</b>\nRp {amount:,.0f}", parse_mode="HTML")
 
@@ -602,7 +616,8 @@ Aturan:
         except (ValueError, IndexError):
             pass
 
-    cats = supabase_get("maskai_categories", {"name": f"ilike.{cat_name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+    result = supabase_get("maskai_categories", {"name": f"ilike.{cat_name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+    cats = result.data if result.ok and isinstance(result.data, list) else []
     cat_id = cats[0]["id"] if cats else get_fallback_category(user_id, tx_type)
     if not cat_id:
         send(chat_id, "❌ Kategori tidak ditemukan.")
@@ -627,7 +642,8 @@ def get_fallback_category(user_id, tx_type):
     name = "Lainnya (Pemasukan)" if tx_type == "I" else "Lainnya (Pengeluaran)"
     # Try user's category first, then global
     for uid in (user_id, 0):
-        cats = supabase_get("maskai_categories", {"user_id": f"eq.{uid}", "name": f"ilike.{name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+        result = supabase_get("maskai_categories", {"user_id": f"eq.{uid}", "name": f"ilike.{name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+        cats = result.data if result.ok and isinstance(result.data, list) else []
         if cats:
             return cats[0]["id"]
     return None
@@ -652,7 +668,8 @@ def handle_pending_date(chat_id, text):
         except (ValueError, IndexError):
             tgl = datetime.now().strftime("%Y-%m-%d")  # fallback
     
-    cats = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
+    result = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
+    cats = result.data if result.ok and isinstance(result.data, list) else []
     cat_id = cats[0]["id"] if cats else get_fallback_category(p["user_id"], p["type"])
     if not cat_id:
         send(chat_id, "❌ Kategori tidak ditemukan.")
@@ -769,7 +786,9 @@ def process(msg, update_id=None):
                 "select": "id,type,amount,description,transaction_dt,created_at,category_id",
                 "order": "id.asc"
             })
-            cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
+            cat_result = supabase_get("maskai_categories", {"select": "id,name"})
+            cat_list = cat_result.data if cat_result.ok and isinstance(cat_result.data, list) else []
+            cats = {c["id"]: c["name"] for c in cat_list}
             
             if not txs:
                 send(chat_id, "❌ Tidak ada transaksi.")
