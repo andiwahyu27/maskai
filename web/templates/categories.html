@@ -1,82 +1,71 @@
 {% extends "base.html" %}
 {% block content %}
 <div x-data="categoriesPage()" x-init="load()">
-  <div class="flex justify-between mb-4">
-    <h2 class="text-2xl font-bold">📋 Kategori</h2>
-    <button @click="openAdd()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition">+ Tambah</button>
+  <div class="flex justify-between items-center mb4">
+    <h2>📋 Kategori</h2>
+    <button @click="openAdd()" class="btn btn-green" style="width:auto;padding:8px 16px">
+      + Tambah
+    </button>
   </div>
 
-  <div x-show="showForm" class="bg-gray-800 rounded p-4 mb-4">
-    <select x-model="form.type" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
-      <option value="E">💳 Pengeluaran</option>
-      <option value="I">💰 Pemasukan</option>
-    </select>
-    <input x-model="form.name" placeholder="Nama" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
-    <input x-model="form.icon" placeholder="Icon emoji" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
-    <button @click="save()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded transition" x-text="editId ? 'Update' : 'Simpan'"></button>
-    <button @click="showForm=false;editId=null" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded ml-2 transition">Batal</button>
+  <div x-show="showForm" class="card mb4" style="border:1px solid #6366f1">
+    <div class="text-sm text-gray mb4" x-text="editId ? 'Edit Kategori' : 'Kategori Baru'"></div>
+    <div class="flex gap2" style="margin-bottom:8px">
+      <input x-model="form.icon" placeholder="Icon" class="input" style="width:60px;text-align:center;font-size:1.5rem" maxlength="2">
+      <select x-model="form.type" class="input" style="width:auto">
+        <option value="E">💳 Pengeluaran</option>
+        <option value="I">💰 Pemasukan</option>
+      </select>
+    </div>
+    <input x-model="form.name" placeholder="Nama kategori" class="input">
+    <div class="flex gap2">
+      <button @click="save()" class="btn btn-blue" style="width:auto;padding:8px 24px" x-text="editId?'Update':'Simpan'"></button>
+      <button @click="showForm=false;editId=null" class="btn btn-gray" style="width:auto;padding:8px 24px">Batal</button>
+    </div>
   </div>
 
-  <div class="bg-gray-800 rounded">
-    <template x-for="c in cats" :key="c.id">
-      <div class="flex justify-between items-center p-3 border-b border-gray-700">
-        <span><span x-text="c.icon"></span> <span x-text="c.name"></span> <span class="text-xs text-gray-500" x-text="c.type=='I'?'💰':'💳'"></span></span>
-        <span>
-          <button @click="editCat(c)" class="text-blue-400 hover:text-blue-300 mr-2">✏️</button>
-          <button @click="delCat(c.id)" class="text-red-400 hover:text-red-300">🗑</button>
-        </span>
-      </div>
-    </template>
+  <div class="card" style="overflow-x:auto;padding:0">
+    <table class="table w-full">
+      <thead>
+        <tr><th>Icon</th><th>Nama</th><th class="text-center">Tipe</th><th class="text-right">Aksi</th></tr>
+      </thead>
+      <tbody>
+        <template x-for="c in cats" :key="c.id">
+          <tr>
+            <td style="font-size:1.3rem" x-text="c.icon||'📦'"></td>
+            <td><span x-text="c.name" style="font-weight:500"></span></td>
+            <td class="text-center">
+              <span class="badge" :class="c.type=='I'?'badge-green':'badge-red'" x-text="c.type=='I'?'💰 Masuk':'💳 Keluar'"></span>
+            </td>
+            <td class="text-right">
+              <div class="flex gap2" style="justify-content:flex-end">
+                <button @click="editCat(c)" title="Edit"
+                  style="background:#1e3a5f;border:none;color:#60a5fa;cursor:pointer;padding:6px 10px;border-radius:6px;font-size:.8rem">
+                  ✏️ Edit
+                </button>
+                <button @click="delCat(c.id)" title="Hapus"
+                  style="background:#450a0a;border:none;color:#f87171;cursor:pointer;padding:6px 10px;border-radius:6px;font-size:.8rem">
+                  🗑 Hapus
+                </button>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <div x-show="cats.length==0" class="text-center p4 text-gray">
+      Belum ada kategori
+    </div>
   </div>
 </div>
 
 <script>
-function categoriesPage() {
-  return {
-    cats: [],
-    showForm: false,
-    editId: null,
-    form: { name: '', type: 'E', icon: '📦' },
-    
-    async load() {
-      try {
-        let r = await fetch('/api/categories');
-        this.cats = await r.json();
-      } catch(e) { console.error(e); }
-    },
-    
-    openAdd() {
-      this.form = { name: '', type: 'E', icon: '📦' };
-      this.editId = null;
-      this.showForm = true;
-    },
-    
-    editCat(c) {
-      this.form = { name: c.name, type: c.type, icon: c.icon };
-      this.editId = c.id;
-      this.showForm = true;
-    },
-    
-    async save() {
-      let method = this.editId ? 'PUT' : 'POST';
-      let body = { ...this.form };
-      if (this.editId) body.id = this.editId;
-      await fetch('/api/categories', {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      this.showForm = false;
-      this.editId = null;
-      await this.load();
-    },
-    
-    async delCat(id) {
-      if (!confirm('Hapus kategori ini?')) return;
-      await fetch('/api/categories?id=' + id, { method: 'DELETE' });
-      await this.load();
-    }
-  }
-}
-</script>
+function categoriesPage(){return{
+  cats:[],showForm:false,editId:null,form:{name:'',type:'E',icon:'📦'},
+  async load(){let r=await fetch('/api/categories');this.cats=await r.json()},
+  openAdd(){this.form={name:'',type:'E',icon:'📦'};this.editId=null;this.showForm=true},
+  editCat(c){this.form={name:c.name,type:c.type,icon:c.icon};this.editId=c.id;this.showForm=true},
+  async save(){let m=this.editId?'PUT':'POST',b={...this.form};if(this.editId)b.id=this.editId;await fetch('/api/categories',{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});this.showForm=false;this.editId=null;await this.load()},
+  async delCat(id){if(!confirm('Hapus kategori ini?'))return;await fetch('/api/categories?id='+id,{method:'DELETE'});await this.load()}
+}}</script>
 {% endblock %}
