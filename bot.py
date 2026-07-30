@@ -154,16 +154,8 @@ def claude(messages, max_tokens=500):
         log.error(f"Claude error: {e}")
         return None
 
-class SafeDict(dict):
-    """Dict with .ok attribute for ApiResult compatibility"""
-    pass
-
-class SafeList(list):
-    """List with .ok attribute for ApiResult compatibility"""
-    pass
-
 def supabase_get(table, params=None):
-    """Supabase GET. Returns list — access .ok to check success"""
+    """Supabase GET. Returns ApiResult — check .ok, use .data"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     if params:
         if isinstance(params, dict):
@@ -171,36 +163,17 @@ def supabase_get(table, params=None):
         else:
             q = "&".join(f"{k}={v}" for k, v in params)
         url += f"?{q}"
-    result = api_get(url, headers=SUPABASE_HEADERS)
-    if result.ok:
-        data = result.data if isinstance(result.data, list) else []
-        data = SafeList(data)
-        data.ok = True
-        return data
-    empty = SafeList()
-    empty.ok = False
-    return empty
+    return api_get(url, headers=SUPABASE_HEADERS)
 
 def supabase_post(table, data):
-    """Supabase POST. Returns dict — access .ok to check success"""
+    """Supabase POST. Returns ApiResult — check .ok, use .data"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
-    result = api_post(url, json=data, headers=SUPABASE_HEADERS)
-    if result.ok:
-        data = result.data if isinstance(result.data, dict) else {}
-        data = SafeDict(data)
-        data.ok = True
-        return data
-    empty = SafeDict()
-    empty.ok = False
-    return empty
+    return api_post(url, json=data, headers=SUPABASE_HEADERS)
 
 def supabase_delete(table, field, value):
-    """Supabase DELETE. Returns ApiResult"""
+    """Supabase DELETE. Returns ApiResult — check .ok"""
     url = f"{SUPABASE_URL}/rest/v1/{table}?{field}=eq.{value}"
-    result = api_delete(url, headers=SUPABASE_HEADERS)
-    data = SafeDict()
-    data.ok = result.ok
-    return data
+    return api_delete(url, headers=SUPABASE_HEADERS)
 
 def api_patch(url, json=None, **kw):
     """Safe PATCH with typed result"""
@@ -286,7 +259,7 @@ def update_owned_category(cat_id, user_id, payload):
     if cat.get("user_id") == 0:
         return False, "Kategori global tidak bisa diedit"
     result = supabase_patch("maskai_categories", [("id", cat_id), ("user_id", user_id)], payload)
-    if not result:
+    if not result.ok:
         return False, "Gagal update"
     return True, None
 
@@ -411,7 +384,7 @@ def cmd_debt(chat_id, user_id, text):
             "counterparty": args[0], "amount": float(args[1]),
             "description": " ".join(args[2:]) or "-", "status": "open", "currency": "IDR"}
     result = supabase_post("maskai_debts", data)
-    if not result:
+    if not result.ok:
         send(chat_id, "❌ Gagal menyimpan.")
         return
     label = "Hutang" if is_hutang else "Piutang"
@@ -425,7 +398,7 @@ def cmd_keranjang(chat_id, user_id, text):
         return
     result = supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
         "description": " ".join(args[1:]) or "-"})
-    if result:
+    if result.ok:
         send(chat_id, f"🛒 <b>Keranjang</b>\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan ke keranjang.")
@@ -493,7 +466,7 @@ def cmd_tambahkat(chat_id, user_id, text):
         return
     data = {"name": name, "type": tx_type, "icon": icon, "user_id": user_id}
     result = supabase_post("maskai_categories", data)
-    if result:
+    if result.ok:
         send(chat_id, f"✅ Kategori <b>{escape_html(name)}</b> ({'Pemasukan' if tx_type=='I' else 'Pengeluaran'}) ditambahkan.", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menambah kategori.")
@@ -577,7 +550,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
     })
-    if result:
+    if result.ok:
         send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
@@ -597,7 +570,7 @@ Aturan:
 - Jika ada tanggal spesifik (contoh: "kemarin", "28 juli", "minggu lalu"), isi field tanggal. Jika tidak ada, isi null."""
 
     result = claude([{"role": "user", "content": prompt}], 200)
-    if not result:
+    if not result.ok:
         send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• <code>beli telur 20rb</code>\n• <code>gaji 5 juta 28 juli</code>")
         return
 
@@ -651,7 +624,7 @@ Aturan:
         "description": desc, "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "natural"} if update_id else None
     })
-    if not result:
+    if not result.ok:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
         return
 
@@ -701,7 +674,7 @@ def handle_pending_date(chat_id, text):
         "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
     })
-    if not result:
+    if not result.ok:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
         return
     
