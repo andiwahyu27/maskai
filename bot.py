@@ -297,10 +297,16 @@ def cmd_laporan(chat_id, user_id, text):
         periode = "Terbaru"
     else:
         cmd = text.lower()
-        if "hari ini" in cmd: days, periode = 1, "Hari Ini"
-        elif "minggu" in cmd: days, periode = 7, "Minggu Ini"
-        else: days, periode = 30, "Bulan Ini"
-        since = (now - timedelta(days=days)).isoformat()
+        if "hari ini" in cmd:
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            periode = "Hari Ini"
+        elif "minggu" in cmd:
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=now.weekday())
+            periode = "Minggu Ini"
+        else:
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            periode = "Bulan Ini"
+        since = start.isoformat()
         txs = supabase_get("maskai_transactions", {
             "user_id": f"eq.{user_id}", "transaction_dt": f"gte.{since}",
             "select": "type,amount,description,transaction_dt,category_id",
