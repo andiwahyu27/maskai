@@ -3,6 +3,14 @@
 <div x-data="dashboard()" x-init="init()">
   <h2>📊 Dashboard</h2>
 
+  <!-- Toast notification -->
+  <div x-show="toast.show" x-transition 
+       :class="toast.ok ? 'card mb4' : 'card mb4'"
+       style="text-align:center;padding:12px"
+       :style="'background:'+(toast.ok ? '#166534' : '#7f1d1d')"
+       x-text="toast.msg"
+       @click="toast.show=false"></div>
+
   <!-- Loading -->
   <div x-show="loading" class="card text-center mb4" style="padding:32px">
     <div class="spinner" style="margin:0 auto 12px"></div>
@@ -54,19 +62,25 @@
 function dashboard(){return{
   data:{bot_running:false,balance:0,income:0,expense:0,recent:[]},
   loading:true,
+  toast:{show:false,msg:'',ok:true},
   async init(){await this.loadData()},
   async loadData(){
     try{let r=await fetch('/api/status');if(!r.ok)throw new Error('API error');this.data=await r.json()}
     catch(e){console.error(e)}this.loading=false
   },
   async sync(){
-    try{let r=await fetch('/api/sync');let d=await r.json();alert(d.ok?('✅ '+d.count+' transaksi disinkron!'):('❌ Error: '+d.error))}
-    catch(e){alert('❌ Gagal sync: '+e)}
+    this.toast={show:true,msg:'⏳ Menyinkronkan ke Google Sheets...',ok:true};
+    try{let r=await fetch('/api/sync');let d=await r.json();
+      this.toast={show:true,msg:d.ok?('✅ '+d.count+' transaksi berhasil disinkron! 📊'):('❌ Gagal: '+d.error),ok:d.ok}
+    }catch(e){this.toast={show:true,msg:'❌ Gagal sync: '+e,ok:false}}
+    setTimeout(()=>this.toast.show=false,5000);
   },
   async restart(){
     if(!confirm('Yakin restart bot?'))return
-    try{await fetch('/api/restart');alert('✅ Bot direstart!');this.loading=true;setTimeout(async()=>await this.loadData(),3000)}
-    catch(e){alert('❌ Gagal: '+e)}
+    this.toast={show:true,msg:'🔄 Merestart bot...',ok:true};
+    try{await fetch('/api/restart');this.toast={show:true,msg:'✅ Bot direstart!',ok:true};this.loading=true;setTimeout(async()=>await this.loadData(),3000)}
+    catch(e){this.toast={show:true,msg:'❌ Gagal: '+e,ok:false}}
+    setTimeout(()=>this.toast.show=false,5000);
   }
 }}</script>
 {% endblock %}
