@@ -33,16 +33,17 @@ def log_security(action, user_id, detail=""):
     log.warning(f"SECURITY | {action} | user={user_id} | {detail}")
 
 def parse_positive_amount(value):
-    """Validate and parse amount. Returns (amount, None) or (None, error_msg)"""
+    """Validate using Decimal. Returns (amount, None) or (None, error)"""
+    from decimal import Decimal, InvalidOperation
     try:
-        amt = float(value)
-    except (ValueError, TypeError):
+        amt = Decimal(str(value))
+    except (InvalidOperation, ValueError):
         return None, "Jumlah tidak valid"
     if amt <= 0:
         return None, "Jumlah harus lebih dari 0"
-    if amt > 999999999.99:
+    if amt > 999999999:
         return None, "Jumlah terlalu besar"
-    return amt, None
+    return float(amt), None
 
 def escape_md(text):
     """Escape special characters for Telegram MarkdownV2"""
@@ -307,11 +308,14 @@ def cmd_laporan(chat_id, user_id, text):
     if len(parts) == 3:  # date range
         try:
             d1, d2 = parts[1], parts[2]
-            since, until = f"{d1}T00:00:00", f"{d2}T23:59:59"
+            # Use lt next_day instead of lte 23:59:59 for safety
+            since = f"{d1}T00:00:00"
+            next_day = (datetime.strptime(d2, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            until = f"{next_day}T00:00:00"
             txs = supabase_get("maskai_transactions", [
                 ("user_id", f"eq.{user_id}"),
                 ("transaction_dt", f"gte.{since}"),
-                ("transaction_dt", f"lte.{until}"),
+                ("transaction_dt", f"lt.{until}"),
                 ("select", "type,amount,description,transaction_dt,category_id"),
                 ("order", "transaction_dt.desc")
             ])
