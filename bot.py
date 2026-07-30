@@ -119,16 +119,30 @@ def send(chat_id, text, parse_mode=None, reply_markup=None):
     return tg("sendMessage", d)
 
 def claude(messages, max_tokens=500):
-    """Claude via Dahono"""
-    r = requests.post(f"{DAHONO_URL}/chat/completions",
-        json={"model": "dahono/claude-sonnet-4.5-free", "messages": messages, "max_tokens": max_tokens},
-        headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
-    if r.status_code == 200 and r.text:
-        return r.json()["choices"][0]["message"]["content"]
-    return None
+    """Claude via Dahono — safe JSON/HTTP handling"""
+    try:
+        r = requests.post(f"{DAHONO_URL}/chat/completions",
+            json={"model": "dahono/claude-sonnet-4.5-free", "messages": messages, "max_tokens": max_tokens},
+            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
+        if r.status_code != 200 or not r.text:
+            log.warning(f"Claude HTTP {r.status_code}: {r.text[:100]}")
+            return None
+        body = r.json()
+        return body["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, requests.Timeout, requests.ConnectionError) as e:
+        log.error(f"Claude error: {e}")
+        return None
+
+class SafeDict(dict):
+    """Dict with .ok attribute for ApiResult compatibility"""
+    pass
+
+class SafeList(list):
+    """List with .ok attribute for ApiResult compatibility"""
+    pass
 
 def supabase_get(table, params=None):
-    """Supabase GET. params: dict or list of (k,v) tuples for duplicate keys"""
+    """Supabase GET. Returns list — access .ok to check success"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     if params:
         if isinstance(params, dict):
@@ -137,19 +151,35 @@ def supabase_get(table, params=None):
             q = "&".join(f"{k}={v}" for k, v in params)
         url += f"?{q}"
     result = api_get(url, headers=SUPABASE_HEADERS)
-    return result.data if result.ok else []
+    if result.ok:
+        data = result.data if isinstance(result.data, list) else []
+        data = SafeList(data)
+        data.ok = True
+        return data
+    empty = SafeList()
+    empty.ok = False
+    return empty
 
 def supabase_post(table, data):
-    """Supabase POST"""
+    """Supabase POST. Returns dict — access .ok to check success"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     result = api_post(url, json=data, headers=SUPABASE_HEADERS)
-    return result.data if result.ok else {}
+    if result.ok:
+        data = result.data if isinstance(result.data, dict) else {}
+        data = SafeDict(data)
+        data.ok = True
+        return data
+    empty = SafeDict()
+    empty.ok = False
+    return empty
 
 def supabase_delete(table, field, value):
-    """Supabase DELETE"""
+    """Supabase DELETE. Returns ApiResult"""
     url = f"{SUPABASE_URL}/rest/v1/{table}?{field}=eq.{value}"
-    r = requests.delete(url, headers=SUPABASE_HEADERS, timeout=10)
-    return r.status_code in (200, 204)
+    result = api_delete(url, headers=SUPABASE_HEADERS)
+    data = SafeDict()
+    data.ok = result.ok
+    return data
 
 def api_patch(url, json=None, **kw):
     """Safe PATCH with typed result"""
@@ -453,7 +483,7 @@ def cmd_menu(chat_id):
     ], "resize_keyboard": True}
     send(chat_id, "🤖 *MASKAI Menu*\nPilih dari keyboard atau ketik perintah:", parse_mode="MarkdownV2", reply_markup=keyboard)
 
-def cmd_ocr(chat_id, user_id, file_id):
+def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     """OCR using GPT-5.5 Vision"""
     info = tg("getFile", {"file_id": file_id})
     if not info.get("ok"):
@@ -520,7 +550,8 @@ def cmd_ocr(chat_id, user_id, file_id):
     result = supabase_post("maskai_transactions", {
         "user_id": user_id, "type": "E", "amount": float(total),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
-        "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR"
+        "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
+        "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
     })
     if result:
         send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="MarkdownV2")
@@ -691,7 +722,7 @@ def process(msg, update_id=None):
         return
 
     if photo:
-        cmd_ocr(chat_id, user_id, photo[-1]["file_id"])
+        cmd_ocr(chat_id, user_id, photo[-1]["file_id"], update_id)
         return
 
     if not text: return
