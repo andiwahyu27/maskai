@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MASKAI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <span class="text-xl font-bold">🤖 MASKAI</span>
+            <span class="text-xs text-gray-500">Dashboard</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/' else '' }}">🏠</a>
+            <a href="/transactions" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/transactions' else '' }}">💰</a>
+            <a href="/categories" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/categories' else '' }}">📋</a>
+            <a href="/settings" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/settings' else '' }}">⚙️</a>
+            <a href="/logs" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/logs' else '' }}">📜</a>
+            <a href="/logout" class="px-3 py-1 text-red-400">🚪</a>
+        </div>
+    </nav>
+    <main class="p-4 max-w-4xl mx-auto">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

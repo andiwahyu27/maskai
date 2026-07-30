@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="{status:{},recent:[],ts:0}" x-init="
+  setInterval(async()=>{
+    let r=await fetch('/api/status');status=await r.json();
+    recent=status.recent;ts=Date.now()
+  },5000)
+">
+  <h2 class="text-2xl font-bold mb-4">📊 Dashboard</h2>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="bg-gray-800 rounded p-4 text-center">
+      <span class="text-2xl" x-text="status.bot_running?'🟢':'🔴'"></span>
+      <p class="text-sm text-gray-400">Bot</p>
+    </div>
+    <div class="bg-gray-800 rounded p-4 text-center">
+      <span class="text-xl font-bold" x-text="'Rp '+(status.balance||0).toLocaleString('id-ID')"></span>
+      <p class="text-xs text-gray-400">Saldo</p>
+    </div>
+    <div class="bg-gray-800 rounded p-4 text-center">
+      <span class="text-xl font-bold" x-text="status.counts?.maskai_transactions||0"></span>
+      <p class="text-xs text-gray-400">Transaksi</p>
+    </div>
+    <div class="bg-gray-800 rounded p-4 text-center">
+      <span class="text-xl font-bold" x-text="Math.floor((status.uptime||0)/3600)+'h'"></span>
+      <p class="text-xs text-gray-400">Uptime</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3 mb-4">
+    <button onclick="fetch('/api/sync')" class="bg-blue-600 p-3 rounded">📊 Sync Sheets</button>
+    <button onclick="fetch('/api/restart')" class="bg-yellow-600 p-3 rounded">🔄 Restart Bot</button>
+  </div>
+
+  <div class="bg-gray-800 rounded p-4">
+    <h3 class="font-bold mb-2">📋 Transaksi Terbaru</h3>
+    <template x-for="t in (recent||[]).slice(0,5)">
+      <div class="flex justify-between py-1 border-b border-gray-700 text-sm">
+        <span x-text="(t.type=='I'?'📥':'📤')+' Rp '+(t.amount||0).toLocaleString('id-ID')"></span>
+        <span class="text-gray-500" x-text="t.transaction_dt?.slice(0,10)"></span>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}

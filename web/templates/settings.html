@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="{settings:{},msg:''}" x-init="let r=await fetch('/api/settings');settings=await r.json()">
+  <h2 class="text-2xl font-bold mb-4">⚙️ Pengaturan</h2>
+  
+  <div x-show="msg" class="bg-green-600 p-3 rounded mb-4" x-text="msg"></div>
+
+  <div class="bg-gray-800 rounded p-4 space-y-3">
+    <div>
+      <label class="text-sm text-gray-400">Model Teks</label>
+      <select x-model="settings.text_model" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+        <option>dahono/claude-sonnet-4.5-free</option>
+        <option>dahono/deepseek-v4-flash</option>
+        <option>dahono/gpt-5.5</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-sm text-gray-400">Model OCR</label>
+      <select x-model="settings.ocr_model" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+        <option>dahono/gpt-5.5</option>
+        <option>dahono/gpt-5.6-luna</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-sm text-gray-400">Bot Token</label>
+      <input type="text" x-model="settings.bot_token" class="w-full bg-gray-700 border border-gray-600 rounded p-2" readonly>
+    </div>
+    <div>
+      <label class="text-sm text-gray-400">Admin Chat ID</label>
+      <input type="text" x-model="settings.admin_id" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+    </div>
+    <div>
+      <label class="text-sm text-gray-400">Google Sheets ID</label>
+      <input type="text" x-model="settings.sheet_id" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+    </div>
+    <button @click="async()=>{
+      let r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
+      msg='Saved!';setTimeout(()=>msg='',3000)
+    }" class="bg-blue-600 px-6 py-3 rounded w-full">💾 Save</button>
+  </div>
+</div>
+{% endblock %}

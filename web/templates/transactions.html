@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div x-data="{txs:[],filter:'all',search:''}" x-init="let r=await fetch('/api/transactions');txs=await r.json()">
+  <div class="flex gap-2 mb-4">
+    <h2 class="text-2xl font-bold">💰 Transaksi</h2>
+    <span class="text-gray-500" x-text="txs.length+' total'"></span>
+  </div>
+
+  <div class="flex gap-2 mb-4">
+    <select x-model="filter" class="bg-gray-700 border border-gray-600 rounded p-2">
+      <option value="all">Semua</option>
+      <option value="I">📥 Pemasukan</option>
+      <option value="E">📤 Pengeluaran</option>
+    </select>
+    <input type="text" x-model="search" placeholder="Cari..." class="bg-gray-700 border border-gray-600 rounded p-2 flex-1">
+  </div>
+
+  <div class="bg-gray-800 rounded overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-700">
+        <tr>
+          <th class="p-2 text-left">Tgl</th>
+          <th class="p-2 text-right">Jumlah</th>
+          <th class="p-2">Kat</th>
+          <th class="p-2">Deskripsi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="t in txs.filter(t=>filter=='all'||t.type==filter).filter(t=>!search||JSON.stringify(t).toLowerCase().includes(search.toLowerCase()))">
+          <tr class="border-t border-gray-700">
+            <td class="p-2" x-text="t.transaction_dt?.slice(0,10)"></td>
+            <td :class="'p-2 text-right '+(t.type=='I'?'text-green-400':'text-red-400')" x-text="'Rp '+(t.amount||0).toLocaleString('id-ID')"></td>
+            <td class="p-2" x-text="t.category_name"></td>
+            <td class="p-2 text-gray-400" x-text="t.description||'-'"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
