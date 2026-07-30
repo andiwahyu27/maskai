@@ -1,88 +1,114 @@
 {% extends "base.html" %}
 {% block content %}
-<div x-data="dashboard()" x-init="init()">
+<div id="app">
   <h2>📊 Dashboard</h2>
 
-  <!-- Toast notification -->
-  <div x-show="toast.show" x-transition 
-       :class="toast.ok ? 'card mb4' : 'card mb4'"
-       style="text-align:center;padding:12px"
-       :style="'background:'+(toast.ok ? '#166534' : '#7f1d1d')"
-       x-text="toast.msg"
-       @click="toast.show=false"></div>
+  <!-- Toast -->
+  <div id="toast" style="display:none;text-align:center;padding:12px;border-radius:8px;margin-bottom:16px;cursor:pointer" onclick="this.style.display='none'"></div>
 
   <!-- Loading -->
-  <div x-show="loading" class="card text-center mb4" style="padding:32px">
+  <div id="loading" class="card text-center" style="padding:32px">
     <div class="spinner" style="margin:0 auto 12px"></div>
     <p class="text-gray">⏳ Memuat data dashboard...</p>
   </div>
 
   <!-- Stats -->
-  <div x-show="!loading" class="grid4 mb4">
-    <div class="stat" :style="'border:2px solid '+(data.bot_running?'#16a34a':'#dc2626')">
-      <div class="val" style="font-size:1.5rem" x-text="data.bot_running ? '🟢' : '🔴'"></div>
+  <div id="stats" class="grid4 mb4" style="display:none">
+    <div class="stat" id="stat-bot">
+      <div class="val" style="font-size:1.5rem" id="bot-icon">🔴</div>
       <div class="lbl">Bot</div>
     </div>
     <div class="stat">
-      <div class="val" x-text="'Rp '+(data.balance||0).toLocaleString('id-ID')"></div>
+      <div class="val" id="val-balance">Rp 0</div>
       <div class="lbl">Saldo</div>
     </div>
     <div class="stat">
-      <div class="val text-green" x-text="'Rp '+(data.income||0).toLocaleString('id-ID')"></div>
+      <div class="val text-green" id="val-income">Rp 0</div>
       <div class="lbl">📥 Pemasukan</div>
     </div>
     <div class="stat">
-      <div class="val text-red" x-text="'Rp '+(data.expense||0).toLocaleString('id-ID')"></div>
+      <div class="val text-red" id="val-expense">Rp 0</div>
       <div class="lbl">📤 Pengeluaran</div>
     </div>
   </div>
 
   <!-- Actions -->
-  <div x-show="!loading" class="grid2 mb4">
-    <button @click="sync()" class="btn btn-blue">📊 Sync Sheets</button>
-    <button @click="restart()" class="btn btn-yellow">🔄 Restart Bot</button>
+  <div id="actions" class="grid2 mb4" style="display:none">
+    <button onclick="doSync()" class="btn btn-blue">📊 Sync Sheets</button>
+    <button onclick="doRestart()" class="btn btn-yellow">🔄 Restart Bot</button>
   </div>
 
   <!-- Recent -->
-  <div x-show="!loading" class="card">
+  <div id="recent-box" class="card" style="display:none">
     <h3 style="font-size:1rem;margin-bottom:8px">📋 Transaksi Terbaru</h3>
-    <template x-for="t in (data && data.recent) || []" :key="t.id || $id('tx')">
-      <div class="flex justify-between p2" style="border-bottom:1px solid #374151">
-        <span x-text="(t.type=='I'?'📥':'📤')+' Rp '+(t.amount||0).toLocaleString('id-ID')"></span>
-        <span class="text-gray text-sm" x-text="(t.transaction_dt||'').slice(0,10)"></span>
-      </div>
-    </template>
-    <div x-show="!data || !data.recent || data.recent.length==0" class="text-gray text-center p4">
-      Belum ada transaksi
-    </div>
+    <div id="recent-list"></div>
   </div>
 </div>
 
 <script>
-function dashboard(){return{
-  data:{bot_running:false,balance:0,income:0,expense:0,recent:[]},
-  loading:true,
-  toast:{show:false,msg:'',ok:true},
-  async init(){await this.loadData()},
-  async loadData(){
-    try{let r=await fetch('/api/status');if(!r.ok)throw new Error('API error '+r.status);this.data=await r.json();
-      console.log('Dashboard loaded:', this.data)}
-    catch(e){console.error('Dashboard error:', e)}
-    this.loading=false
-  },
-  async sync(){
-    this.toast={show:true,msg:'⏳ Menyinkronkan ke Google Sheets...',ok:true};
-    try{let r=await fetch('/api/sync');let d=await r.json();
-      this.toast={show:true,msg:d.ok?('✅ '+d.count+' transaksi berhasil disinkron! 📊'):('❌ Gagal: '+d.error),ok:d.ok}
-    }catch(e){this.toast={show:true,msg:'❌ Gagal sync: '+e,ok:false}}
-    setTimeout(()=>this.toast.show=false,5000);
-  },
-  async restart(){
-    if(!confirm('Yakin restart bot?'))return
-    this.toast={show:true,msg:'🔄 Merestart bot...',ok:true};
-    try{await fetch('/api/restart');this.toast={show:true,msg:'✅ Bot direstart!',ok:true};this.loading=true;setTimeout(async()=>await this.loadData(),3000)}
-    catch(e){this.toast={show:true,msg:'❌ Gagal: '+e,ok:false}}
-    setTimeout(()=>this.toast.show=false,5000);
+async function load() {
+  try {
+    let r = await fetch('/api/status');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    let d = await r.json();
+    
+    document.getElementById('loading').style.display = 'none';
+    
+    // Stats
+    document.getElementById('bot-icon').textContent = d.bot_running ? '🟢' : '🔴';
+    document.getElementById('stat-bot').style.border = '2px solid ' + (d.bot_running ? '#16a34a' : '#dc2626');
+    document.getElementById('val-balance').textContent = 'Rp ' + (d.balance||0).toLocaleString('id-ID');
+    document.getElementById('val-income').textContent = 'Rp ' + (d.income||0).toLocaleString('id-ID');
+    document.getElementById('val-expense').textContent = 'Rp ' + (d.expense||0).toLocaleString('id-ID');
+    document.getElementById('stats').style.display = 'grid';
+    document.getElementById('actions').style.display = 'grid';
+    document.getElementById('recent-box').style.display = 'block';
+    
+    // Recent transactions
+    let list = document.getElementById('recent-list');
+    list.innerHTML = '';
+    if (d.recent && d.recent.length > 0) {
+      for (let t of d.recent) {
+        list.innerHTML += '<div class="flex justify-between p2" style="border-bottom:1px solid #374151">' +
+          '<span>' + (t.type=='I'?'📥':'📤') + ' Rp ' + (t.amount||0).toLocaleString('id-ID') + '</span>' +
+          '<span class="text-gray text-sm">' + (t.transaction_dt||'').slice(0,10) + '</span></div>';
+      }
+    } else {
+      list.innerHTML = '<div class="text-gray text-center p4">Belum ada transaksi</div>';
+    }
+  } catch(e) {
+    console.error('Load error:', e);
+    document.getElementById('loading').innerHTML = '<p style="color:#f87171">❌ Gagal memuat data. <a href="/login" style="color:#60a5fa">Login ulang</a></p>';
   }
-}}</script>
+}
+
+function toast(msg, ok) {
+  let t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#166534' : '#7f1d1d';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 5000);
+}
+
+async function doSync() {
+  toast('⏳ Menyinkronkan ke Google Sheets...', true);
+  try {
+    let r = await fetch('/api/sync');
+    let d = await r.json();
+    toast(d.ok ? ('✅ ' + d.count + ' transaksi berhasil disinkron!') : ('❌ ' + d.error), d.ok);
+  } catch(e) { toast('❌ Gagal sync: ' + e, false); }
+}
+
+async function doRestart() {
+  if (!confirm('Yakin restart bot?')) return;
+  toast('🔄 Merestart bot...', true);
+  try {
+    await fetch('/api/restart');
+    toast('✅ Bot direstart!', true);
+    setTimeout(load, 3000);
+  } catch(e) { toast('❌ Gagal: ' + e, false); }
+}
+
+load();
+</script>
 {% endblock %}
