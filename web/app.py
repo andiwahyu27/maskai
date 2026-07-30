@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """MASKAI Dashboard - Flask web interface"""
-import os, sys, json, time, requests
+from datetime import timedelta
+
+import os, sys, json, time, requests, secrets, hashlib
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, abort
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "maskai-dashboard-secret-2026")
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+app.permanent_session_lifetime = timedelta(hours=24)
 
 # ── Config ──
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://pgnzzukciwtcxyzjuxlc.supabase.co")
@@ -16,7 +19,28 @@ DAHONO_KEY = os.environ.get("DAHONO_KEY", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "MaskaiAdmin_27")
 SUPABASE_HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
 
+# Rate limiting
+LOGIN_ATTEMPTS = {}
+MAX_ATTEMPTS = 5
+BLOCK_TIME = 300
+
 BOT_START_TIME = time.time()
+
+# ── Security helpers ──
+def sanitize_param(value):
+    """Remove dangerous characters from query params"""
+    if not isinstance(value, str): return value
+    return value.replace("'", "").replace('"', "").replace(";", "").replace("--", "")
+
+def is_rate_limited(ip):
+    now = time.time()
+    if ip in LOGIN_ATTEMPTS:
+        attempts, first = LOGIN_ATTEMPTS[ip]
+        if now - first < BLOCK_TIME and attempts >= MAX_ATTEMPTS:
+            return True
+        if now - first >= BLOCK_TIME:
+            del LOGIN_ATTEMPTS[ip]
+    return False
 
 # ── Auth ──
 def login_required(f):
@@ -27,12 +51,34 @@ def login_required(f):
         return f(*args, **kw)
     return wrap
 
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    ip = request.remote_addr or "unknown"
     if request.method == "POST":
-        if request.form.get("password") == ADMIN_PASSWORD:
+        if is_rate_limited(ip):
+            time.sleep(2)
+            return render_template("login.html", error="Terlalu banyak percobaan. Coba lagi 5 menit.")
+        
+        pwd = request.form.get("password", "")
+        # Constant-time comparison
+        if len(pwd) == len(ADMIN_PASSWORD) and secrets.compare_digest(pwd.encode(), ADMIN_PASSWORD.encode()):
             session["logged_in"] = True
+            session.permanent = True
+            LOGIN_ATTEMPTS.pop(ip, None)
             return redirect(url_for("dashboard"))
+        
+        LOGIN_ATTEMPTS[ip] = (LOGIN_ATTEMPTS.get(ip, (0, time.time()))[0] + 1, 
+                               LOGIN_ATTEMPTS.get(ip, (0, time.time()))[1])
+        time.sleep(1)  # Slow down brute force
         return render_template("login.html", error="Password salah!")
     return render_template("login.html")
 
@@ -258,8 +304,13 @@ def api_sync():
 @app.route("/api/restart")
 @login_required
 def api_restart():
+    log_audit("restart", request.remote_addr)
     os.system("sudo systemctl restart maskai-bot.service")
     return jsonify({"ok": True})
+
+def log_audit(action, ip):
+    with open("/tmp/maskai-web-audit.log", "a") as f:
+        f.write(f"{datetime.utcnow().isoformat()} {ip} {action}\n")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
