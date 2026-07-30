@@ -4,26 +4,58 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MASKAI Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#111827;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+        nav{background:#1f2937;border-bottom:1px solid #374151;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+        nav .brand{font-size:1.25rem;font-weight:700}
+        nav .links{display:flex;gap:8px}
+        nav .links a{padding:4px 12px;border-radius:6px;text-decoration:none;color:#9ca3af;font-size:.9rem}
+        nav .links a:hover,.nav-active{background:#374151;color:#fff}
+        main{padding:16px;max-width:900px;margin:0 auto}
+        h2{font-size:1.5rem;font-weight:700;margin-bottom:16px}
+        .card{background:#1f2937;border-radius:8px;padding:16px}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+        .stat{background:#1f2937;border-radius:8px;padding:16px;text-align:center}
+        .stat .val{font-size:1.25rem;font-weight:700}
+        .stat .lbl{font-size:.75rem;color:#9ca3af;margin-top:4px}
+        .btn{display:block;width:100%;padding:12px;border-radius:8px;border:none;color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;transition:opacity .2s}
+        .btn:hover{opacity:.85}
+        .btn-blue{background:#2563eb}
+        .btn-yellow{background:#ca8a04}
+        .btn-green{background:#16a34a}
+        .btn-red{background:#dc2626}
+        .btn-gray{background:#4b5563}
+        .table{width:100%;font-size:.875rem;border-collapse:collapse}
+        .table th{background:#374151;padding:8px;text-align:left}
+        .table td{padding:8px;border-bottom:1px solid #374151}
+        .table tr:hover td{background:#1f2937}
+        .input{width:100%;padding:10px;background:#374151;border:1px solid #4b5563;border-radius:6px;color:#fff;margin-bottom:8px}
+        .input:focus{outline:none;border-color:#6366f1}
+        .badge{padding:2px 8px;border-radius:12px;font-size:.75rem}
+        .badge-green{background:#166534;color:#4ade80}
+        .badge-red{background:#7f1d1d;color:#f87171}
+        .gap2{gap:8px}.mb4{margin-bottom:16px}.flex{display:flex}.justify-between{justify-content:space-between}.items-center{align-items:center}.text-sm{font-size:.875rem}.text-xs{font-size:.75rem}.text-gray{color:#9ca3af}.text-green{color:#4ade80}.text-red{color:#f87171}.text-right{text-align:right}.text-center{text-align:center}.w-full{width:100%}.p2{padding:8px}.p3{padding:12px}.p4{padding:16px}.rounded{border-radius:8px}.space-y>*+*{margin-top:8px}
+        .spinner{display:inline-block;width:40px;height:40px;border:4px solid #374151;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @media(max-width:640px){.grid4{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+    </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen">
-    <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-4">
-            <span class="text-xl font-bold">🤖 MASKAI</span>
-            <span class="text-xs text-gray-500">Dashboard</span>
-        </div>
-        <div class="flex items-center gap-3">
-            <a href="/" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/' else '' }}">🏠</a>
-            <a href="/transactions" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/transactions' else '' }}">💰</a>
-            <a href="/categories" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/categories' else '' }}">📋</a>
-            <a href="/settings" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/settings' else '' }}">⚙️</a>
-            <a href="/logs" class="px-3 py-1 rounded {{ 'bg-gray-700' if request.path == '/logs' else '' }}">📜</a>
-            <a href="/logout" class="px-3 py-1 text-red-400">🚪</a>
+<body>
+    <nav>
+        <span class="brand">🤖 MASKAI</span>
+        <div class="links">
+            <a href="/" class="{% if request.path == '/' %}nav-active{% endif %}">🏠</a>
+            <a href="/transactions" class="{% if request.path == '/transactions' %}nav-active{% endif %}">💰</a>
+            <a href="/categories" class="{% if request.path == '/categories' %}nav-active{% endif %}">📋</a>
+            <a href="/settings" class="{% if request.path == '/settings' %}nav-active{% endif %}">⚙️</a>
+            <a href="/logs" class="{% if request.path == '/logs' %}nav-active{% endif %}">📜</a>
+            <a href="/logout" style="color:#f87171">🚪</a>
         </div>
     </nav>
-    <main class="p-4 max-w-4xl mx-auto">
+    <main>
         {% block content %}{% endblock %}
     </main>
 </body>

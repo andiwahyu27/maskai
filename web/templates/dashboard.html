@@ -1,98 +1,72 @@
 {% extends "base.html" %}
 {% block content %}
 <div x-data="dashboard()" x-init="init()">
-  <h2 class="text-2xl font-bold mb-4">📊 Dashboard</h2>
+  <h2>📊 Dashboard</h2>
 
-  <!-- Loading Overlay -->
-  <div x-show="loading" x-transition class="bg-gray-800 border border-gray-600 rounded-lg p-8 mb-4 text-center">
-    <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-gray-600 border-t-blue-500 mb-3"></div>
-    <p class="text-gray-400">⏳ Memuat data dashboard...</p>
+  <!-- Loading -->
+  <div x-show="loading" class="card text-center mb4" style="padding:32px">
+    <div class="spinner" style="margin:0 auto 12px"></div>
+    <p class="text-gray">⏳ Memuat data dashboard...</p>
   </div>
 
   <!-- Stats -->
-  <div x-show="!loading" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-    <div class="bg-gray-800 rounded p-4 text-center" :class="{'border border-green-500': data.bot_running, 'border border-red-500': !data.bot_running}">
-      <span class="text-2xl" x-text="data.bot_running ? '🟢' : '🔴'"></span>
-      <p class="text-sm text-gray-400">Bot</p>
+  <div x-show="!loading" class="grid4 mb4">
+    <div class="stat" :style="'border:2px solid '+(data.bot_running?'#16a34a':'#dc2626')">
+      <div class="val" style="font-size:1.5rem" x-text="data.bot_running ? '🟢' : '🔴'"></div>
+      <div class="lbl">Bot</div>
     </div>
-    <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-xl font-bold" x-text="'Rp '+(data.balance||0).toLocaleString('id-ID')"></span>
-      <p class="text-xs text-gray-400">Saldo</p>
+    <div class="stat">
+      <div class="val" x-text="'Rp '+(data.balance||0).toLocaleString('id-ID')"></div>
+      <div class="lbl">Saldo</div>
     </div>
-    <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-lg font-bold text-green-400" x-text="'Rp '+(data.income||0).toLocaleString('id-ID')"></span>
-      <p class="text-xs text-gray-400">📥 Pemasukan</p>
+    <div class="stat">
+      <div class="val text-green" x-text="'Rp '+(data.income||0).toLocaleString('id-ID')"></div>
+      <div class="lbl">📥 Pemasukan</div>
     </div>
-    <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-lg font-bold text-red-400" x-text="'Rp '+(data.expense||0).toLocaleString('id-ID')"></span>
-      <p class="text-xs text-gray-400">📤 Pengeluaran</p>
+    <div class="stat">
+      <div class="val text-red" x-text="'Rp '+(data.expense||0).toLocaleString('id-ID')"></div>
+      <div class="lbl">📤 Pengeluaran</div>
     </div>
   </div>
 
   <!-- Actions -->
-  <div x-show="!loading" class="grid grid-cols-2 gap-3 mb-4">
-    <button @click="sync()" class="bg-blue-600 hover:bg-blue-700 p-3 rounded transition">📊 Sync Sheets</button>
-    <button @click="restart()" class="bg-yellow-600 hover:bg-yellow-700 p-3 rounded transition">🔄 Restart Bot</button>
+  <div x-show="!loading" class="grid2 mb4">
+    <button @click="sync()" class="btn btn-blue">📊 Sync Sheets</button>
+    <button @click="restart()" class="btn btn-yellow">🔄 Restart Bot</button>
   </div>
 
-  <!-- Recent Transactions -->
-  <div x-show="!loading" class="bg-gray-800 rounded p-4">
-    <h3 class="font-bold mb-2">📋 Transaksi Terbaru</h3>
-    <template x-for="t in data.recent || []" :key="t.id || Math.random()">
-      <div class="flex justify-between py-1 border-b border-gray-700 text-sm">
-        <span x-text="(t.type=='I' ? '📥' : '📤') + ' Rp ' + (t.amount||0).toLocaleString('id-ID')"></span>
-        <span class="text-gray-500" x-text="(t.transaction_dt||'').slice(0,10)"></span>
+  <!-- Recent -->
+  <div x-show="!loading" class="card">
+    <h3 style="font-size:1rem;margin-bottom:8px">📋 Transaksi Terbaru</h3>
+    <template x-for="t in data.recent || []" :key="t.id">
+      <div class="flex justify-between p2" style="border-bottom:1px solid #374151">
+        <span x-text="(t.type=='I'?'📥':'📤')+' Rp '+(t.amount||0).toLocaleString('id-ID')"></span>
+        <span class="text-gray text-sm" x-text="(t.transaction_dt||'').slice(0,10)"></span>
       </div>
     </template>
-    <div x-show="data.recent && data.recent.length == 0" class="text-gray-500 text-sm py-4 text-center">
+    <div x-show="data.recent && data.recent.length==0" class="text-gray text-center p4">
       Belum ada transaksi
     </div>
   </div>
 </div>
 
 <script>
-function dashboard() {
-  return {
-    data: { bot_running: false, balance: 0, income: 0, expense: 0, recent: [] },
-    loading: true,
-    
-    async init() {
-      await this.loadData();
-    },
-    
-    async loadData() {
-      try {
-        let r = await fetch('/api/status');
-        if (!r.ok) throw new Error('API error: ' + r.status);
-        this.data = await r.json();
-      } catch(e) {
-        console.error('Dashboard load error:', e);
-      }
-      this.loading = false;
-    },
-    
-    async sync() {
-      try {
-        let r = await fetch('/api/sync');
-        let d = await r.json();
-        alert(d.ok ? ('✅ ' + d.count + ' transaksi disinkron!') : ('❌ Error: ' + d.error));
-      } catch(e) {
-        alert('❌ Gagal sync: ' + e);
-      }
-    },
-    
-    async restart() {
-      if (!confirm('Yakin restart bot?')) return;
-      try {
-        await fetch('/api/restart');
-        alert('✅ Bot direstart!');
-        this.loading = true;
-        setTimeout(async () => await this.loadData(), 3000);
-      } catch(e) {
-        alert('❌ Gagal restart: ' + e);
-      }
-    }
+function dashboard(){return{
+  data:{bot_running:false,balance:0,income:0,expense:0,recent:[]},
+  loading:true,
+  async init(){await this.loadData()},
+  async loadData(){
+    try{let r=await fetch('/api/status');if(!r.ok)throw new Error('API error');this.data=await r.json()}
+    catch(e){console.error(e)}this.loading=false
+  },
+  async sync(){
+    try{let r=await fetch('/api/sync');let d=await r.json();alert(d.ok?('✅ '+d.count+' transaksi disinkron!'):('❌ Error: '+d.error))}
+    catch(e){alert('❌ Gagal sync: '+e)}
+  },
+  async restart(){
+    if(!confirm('Yakin restart bot?'))return
+    try{await fetch('/api/restart');alert('✅ Bot direstart!');this.loading=true;setTimeout(async()=>await this.loadData(),3000)}
+    catch(e){alert('❌ Gagal: '+e)}
   }
-}
-</script>
+}}</script>
 {% endblock %}

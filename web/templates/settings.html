@@ -1,42 +1,43 @@
 {% extends "base.html" %}
 {% block content %}
-<div x-data="{settings:{},msg:''}" x-init="let r=await fetch('/api/settings');settings=await r.json()">
-  <h2 class="text-2xl font-bold mb-4">⚙️ Pengaturan</h2>
-  
-  <div x-show="msg" class="bg-green-600 p-3 rounded mb-4" x-text="msg"></div>
-
-  <div class="bg-gray-800 rounded p-4 space-y-3">
+<div x-data="settingsPage()" x-init="load()">
+  <h2>⚙️ Pengaturan</h2>
+  <div x-show="msg" class="card mb4" style="background:#166534;text-align:center" x-text="msg"></div>
+  <div class="card space-y">
     <div>
-      <label class="text-sm text-gray-400">Model Teks</label>
-      <select x-model="settings.text_model" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+      <label class="text-sm text-gray">Model Teks</label>
+      <select x-model="data.text_model" class="input">
         <option>dahono/claude-sonnet-4.5-free</option>
         <option>dahono/deepseek-v4-flash</option>
         <option>dahono/gpt-5.5</option>
       </select>
     </div>
     <div>
-      <label class="text-sm text-gray-400">Model OCR</label>
-      <select x-model="settings.ocr_model" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+      <label class="text-sm text-gray">Model OCR</label>
+      <select x-model="data.ocr_model" class="input">
         <option>dahono/gpt-5.5</option>
         <option>dahono/gpt-5.6-luna</option>
       </select>
     </div>
     <div>
-      <label class="text-sm text-gray-400">Bot Token</label>
-      <input type="text" x-model="settings.bot_token" class="w-full bg-gray-700 border border-gray-600 rounded p-2" readonly>
+      <label class="text-sm text-gray">Bot Token</label>
+      <input x-model="data.bot_token" class="input" readonly>
     </div>
     <div>
-      <label class="text-sm text-gray-400">Admin Chat ID</label>
-      <input type="text" x-model="settings.admin_id" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+      <label class="text-sm text-gray">Admin Chat ID</label>
+      <input x-model="data.admin_id" class="input">
     </div>
     <div>
-      <label class="text-sm text-gray-400">Google Sheets ID</label>
-      <input type="text" x-model="settings.sheet_id" class="w-full bg-gray-700 border border-gray-600 rounded p-2">
+      <label class="text-sm text-gray">Google Sheets ID</label>
+      <input x-model="data.sheet_id" class="input">
     </div>
-    <button @click="async()=>{
-      let r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
-      msg='Saved!';setTimeout(()=>msg='',3000)
-    }" class="bg-blue-600 px-6 py-3 rounded w-full">💾 Save</button>
+    <button @click="save()" class="btn btn-blue">💾 Save</button>
   </div>
 </div>
+<script>
+function settingsPage(){return{
+  data:{},msg:'',
+  async load(){let r=await fetch('/api/settings');this.data=await r.json()},
+  async save(){await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)});this.msg='✅ Saved!';setTimeout(()=>this.msg='',3000)}
+}}</script>
 {% endblock %}

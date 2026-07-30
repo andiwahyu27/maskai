@@ -1,17 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<div x-data="{logs:'Loading...',level:'all'}"
-     x-init="async function load(){let r=await fetch('/api/logs?level='+level);logs=(await r.json()).logs;setTimeout(load,10000)};load()">
-  <div class="flex justify-between mb-4">
-    <h2 class="text-2xl font-bold">📜 Log</h2>
-    <select x-model="level" class="bg-gray-700 border border-gray-600 rounded p-2"
-            @change="async()=>{let r=await fetch('/api/logs?level='+level);logs=(await r.json()).logs}">
+<div x-data="logPage()" x-init="load()">
+  <div class="flex justify-between items-center mb4">
+    <h2>📜 Log</h2>
+    <select x-model="level" @change="load()" class="input" style="width:auto">
       <option value="all">Semua</option>
       <option value="ERROR">Error</option>
       <option value="WARNING">Warning</option>
       <option value="INFO">Info</option>
     </select>
   </div>
-  <pre class="bg-gray-950 text-green-400 p-4 rounded text-xs overflow-x-auto max-h-[70vh] overflow-y-auto" x-text="logs"></pre>
+  <pre class="card" style="background:#0a0a0a;color:#22c55e;max-height:70vh;overflow-y:auto;font-size:.75rem;line-height:1.4;white-space:pre-wrap" x-text="logs||'Memuat...'"></pre>
 </div>
+<script>
+function logPage(){return{
+  logs:'',level:'all',
+  async load(){let r=await fetch('/api/logs?lines=200&level='+this.level);this.logs=(await r.json()).logs;setTimeout(()=>this.load(),10000)}
+}}</script>
 {% endblock %}
