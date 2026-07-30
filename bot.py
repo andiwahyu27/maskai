@@ -233,7 +233,7 @@ def cmd_start(chat_id):
 📝 `/hutang <nama> <jumlah>` `/piutang <nama> <jumlah>`
 🛒 `/keranjang <jumlah> <desk>`
 📌 `/status` — cek bot"""
-    send(chat_id, msg, parse_mode="Markdown")
+    send(chat_id, msg, parse_mode="MarkdownV2")
 
 def cmd_laporan(chat_id, user_id, text):
     """Handle /laporan"""
@@ -274,7 +274,7 @@ def cmd_laporan(chat_id, user_id, text):
         })
 
     if not txs:
-        send(chat_id, f"📊 *Laporan {periode}*\n\nBelum ada transaksi.", parse_mode="Markdown")
+        send(chat_id, f"📊 *Laporan {periode}*\n\nBelum ada transaksi.", parse_mode="MarkdownV2")
         return
 
     cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
@@ -297,12 +297,12 @@ def cmd_laporan(chat_id, user_id, text):
         label = "Pemasukan" if t["type"] == "I" else "Pengeluaran"
         msg += f"\n📅 {dt.strftime('%d %b %Y')}\n📝 {cat} ({label})\n💵 Rp {t['amount']:,.0f}\n"
 
-    send(chat_id, msg, parse_mode="Markdown")
+    send(chat_id, msg, parse_mode="MarkdownV2")
 
 def cmd_saldo(chat_id, user_id):
     bal = supabase_get("maskai_balance", {"user_id": f"eq.{user_id}", "select": "balance"})
     amount = bal[0]["balance"] if bal else 0
-    send(chat_id, f"💰 *Saldo*\nRp {amount:,.0f}", parse_mode="Markdown")
+    send(chat_id, f"💰 *Saldo*\nRp {amount:,.0f}", parse_mode="MarkdownV2")
 
 def cmd_debt(chat_id, user_id, text):
     parts = text.strip().split()
@@ -318,7 +318,7 @@ def cmd_debt(chat_id, user_id, text):
             "description": " ".join(args[2:]) or "-", "status": "open", "currency": "IDR"}
     supabase_post("maskai_debts", data)
     label = "Hutang" if is_hutang else "Piutang"
-    send(chat_id, f"📝 *{label}*\nRp {float(args[1]):,.0f}\n👤 {args[0]}", parse_mode="Markdown")
+    send(chat_id, f"📝 *{label}*\nRp {float(args[1]):,.0f}\n👤 {args[0]}", parse_mode="MarkdownV2")
 
 def cmd_keranjang(chat_id, user_id, text):
     rest = text[11:].strip()
@@ -328,7 +328,7 @@ def cmd_keranjang(chat_id, user_id, text):
         return
     supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
         "description": " ".join(args[1:]) or "-"})
-    send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="Markdown")
+    send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="MarkdownV2")
 
 def cmd_kategori(chat_id, user_id):
     """List categories accessible to user"""
@@ -343,7 +343,7 @@ def cmd_kategori(chat_id, user_id):
         global_tag = " 🌐" if c.get("user_id") == 0 else ""
         msg += f"\n#{c['id']} {icon} {c['name']} {tipe}{global_tag}"
     msg += "\n\n/editkat <id> <nama>\n/hapuskat <id>\n/tambahkat <I/E> <nama>"
-    send(chat_id, msg, parse_mode="Markdown")
+    send(chat_id, msg, parse_mode="MarkdownV2")
 
 def cmd_editkat(chat_id, user_id, text):
     """Edit category with ownership check"""
@@ -355,7 +355,7 @@ def cmd_editkat(chat_id, user_id, text):
     new_name = " ".join(parts[2:])
     ok, err = update_owned_category(cat_id, user_id, {"name": new_name})
     if ok:
-        send(chat_id, f"✅ Kategori #{cat_id} diubah jadi *{escape_md(new_name)}*", parse_mode="Markdown")
+        send(chat_id, f"✅ Kategori #{cat_id} diubah jadi *{escape_md(new_name)}*", parse_mode="MarkdownV2")
     else:
         send(chat_id, f"❌ {err}")
 
@@ -394,7 +394,7 @@ def cmd_tambahkat(chat_id, user_id, text):
     data = {"name": name, "type": tx_type, "icon": icon, "user_id": user_id}
     result = supabase_post("maskai_categories", data)
     if result:
-        send(chat_id, f"✅ Kategori *{escape_md(name)}* ({'Pemasukan' if tx_type=='I' else 'Pengeluaran'}) ditambahkan.", parse_mode="Markdown")
+        send(chat_id, f"✅ Kategori *{escape_md(name)}* ({'Pemasukan' if tx_type=='I' else 'Pengeluaran'}) ditambahkan.", parse_mode="MarkdownV2")
     else:
         send(chat_id, "❌ Gagal menambah kategori.")
 
@@ -405,7 +405,7 @@ def cmd_menu(chat_id):
         ["/kategori", "/keranjang"],
         ["/status", "/help"]
     ], "resize_keyboard": True}
-    send(chat_id, "🤖 *MASKAI Menu*\nPilih dari keyboard atau ketik perintah:", parse_mode="Markdown", reply_markup=keyboard)
+    send(chat_id, "🤖 *MASKAI Menu*\nPilih dari keyboard atau ketik perintah:", parse_mode="MarkdownV2", reply_markup=keyboard)
 
 def cmd_ocr(chat_id, user_id, file_id):
     """OCR using GPT-5.5 Vision"""
@@ -462,7 +462,7 @@ def cmd_ocr(chat_id, user_id, file_id):
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR"
     })
-    send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
+    send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="MarkdownV2")
 
 def cmd_natural(chat_id, user_id, text):
     """Parse natural language input"""
@@ -505,7 +505,7 @@ Aturan:
     if not tgl:
         # Save pending tx
         pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id}
-        send(chat_id, f"📅 *Kapan tanggal transaksinya?*\nTulis: `28 juli` atau `kemarin` atau `hari ini`", parse_mode="Markdown")
+        send(chat_id, f"📅 *Kapan tanggal transaksinya?*\nTulis: `28 juli` atau `kemarin` atau `hari ini`", parse_mode="MarkdownV2")
         return
     
     # Convert relative dates
@@ -536,7 +536,7 @@ Aturan:
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
     esc_desc = escape_md(desc)
     esc_cat = escape_md(cat_name)
-    send(chat_id, f"✅ *{label}*\nRp {amt:,.0f}\n{esc_desc}\nKategori: {esc_cat}\n📅 {tgl}", parse_mode="Markdown")
+    send(chat_id, f"✅ *{label}*\nRp {amt:,.0f}\n{esc_desc}\nKategori: {esc_cat}\n📅 {tgl}", parse_mode="MarkdownV2")
 
 def get_fallback_category(user_id, tx_type):
     """Lookup fallback category by name and type, avoid hardcoded IDs"""
@@ -580,7 +580,7 @@ def handle_pending_date(chat_id, text):
     })
     
     label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
-    send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{escape_md(p['desc'])}\nKategori: {escape_md(p['cat'])}\n📅 {tgl}", parse_mode="Markdown")
+    send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{escape_md(p['desc'])}\nKategori: {escape_md(p['cat'])}\n📅 {tgl}", parse_mode="MarkdownV2")
 
 def cmd_usage(chat_id):
     """Show Supabase usage stats"""
@@ -602,7 +602,7 @@ def cmd_usage(chat_id):
         msg += f"  {label}: {ct}\n"
     est_size_mb = (total_rows * 0.5) / 1024
     msg += f"\n📦 *Estimasi:*\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
-    send(chat_id, msg, parse_mode="Markdown")
+    send(chat_id, msg, parse_mode="MarkdownV2")
 
 # ── Command Router ──
 
@@ -661,7 +661,7 @@ def process(msg):
         for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
             r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
             db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-        send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 *Database:*\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="Markdown")
+        send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 *Database:*\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="MarkdownV2")
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
@@ -724,7 +724,7 @@ def process(msg):
                 sheet.append_rows(rows[i:i+500])
             
             count = len(txs)
-            send(chat_id, f"✅ Sudah dilakukan sinkronisasi ke Google Sheets.\n{count} transaksi berhasil disinkron.\nSilahkan cek spreadsheet", parse_mode="Markdown")
+            send(chat_id, f"✅ Sudah dilakukan sinkronisasi ke Google Sheets.\n{count} transaksi berhasil disinkron.\nSilahkan cek spreadsheet", parse_mode="MarkdownV2")
             
         except Exception as e:
             log.error(f"Sync error: {e}")
@@ -833,7 +833,7 @@ def main():
                             keyboard["inline_keyboard"].append(
                                 [{"text": "🔙 Kembali", "callback_data": "menu_kategori"}]
                             )
-                            send(chat_id, f"📋 *{escape_md(cat.get('icon','📦'))} {escape_md(cat['name'])}*\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="Markdown", reply_markup=keyboard)
+                            send(chat_id, f"📋 *{escape_md(cat.get('icon','📦'))} {escape_md(cat['name'])}*\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="MarkdownV2", reply_markup=keyboard)
                         elif data_cb.startswith("katdelok_"):
                             cat_id = data_cb.split("_")[1]
                             ok, err = delete_owned_category(cat_id, cb_user_id)
