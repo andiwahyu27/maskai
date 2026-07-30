@@ -1,20 +1,117 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MASKAI - Login</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MASKAI - Access Terminal</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#000;color:#00ff41;font-family:'Courier New',monospace;min-height:100vh;overflow:hidden}
+        
+        /* Matrix rain background */
+        #matrix{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:.15}
+        
+        .container{position:relative;z-index:1;display:flex;justify-content:center;align-items:center;min-height:100vh}
+        
+        .terminal{background:rgba(0,15,0,.92);border:1px solid #0a3f0a;border-radius:4px;width:420px;max-width:90vw;padding:0;box-shadow:0 0 40px rgba(0,255,65,.1),inset 0 0 20px rgba(0,255,65,.05)}
+        .terminal-header{background:#0a1a0a;padding:10px 14px;border-bottom:1px solid #0a3f0a;display:flex;align-items:center;gap:8px}
+        .terminal-dot{width:10px;height:10px;border-radius:50%}
+        .dot-red{background:#ff5f56}.dot-yellow{background:#ffbd2e}.dot-green{background:#27c93f}
+        .terminal-title{color:#005500;font-size:.75rem;margin-left:8px;flex:1}
+        .terminal-body{padding:30px 28px}
+        
+        .ascii{color:#00cc33;font-size:.55rem;line-height:1.2;text-align:center;margin-bottom:24px;white-space:pre}
+        
+        .prompt{display:flex;align-items:center;gap:6px;margin-bottom:16px}
+        .prompt-arrow{color:#00ff41}
+        .prompt-path{color:#666}
+        
+        .input-line{display:flex;align-items:center;background:rgba(0,20,0,.6);border:1px solid #0a3f0a;border-radius:3px;padding:0 12px;transition:border-color .3s}
+        .input-line:focus-within{border-color:#00ff41;box-shadow:0 0 10px rgba(0,255,65,.1)}
+        .input-line input{flex:1;background:none;border:none;color:#00ff41;font-family:'Courier New',monospace;font-size:.95rem;padding:12px 0;outline:none;caret-color:#00ff41}
+        .input-line input::placeholder{color:#0a3f0a}
+        .input-line button{background:none;border:none;color:#0a3f0a;cursor:pointer;font-size:1.2rem;padding:8px;transition:color .3s}
+        .input-line:focus-within button{color:#00ff41}
+        .input-line button:hover{color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,.5)}
+        
+        .error-text{color:#ff3333;font-size:.8rem;margin-top:8px;text-shadow:0 0 5px rgba(255,0,0,.3)}
+        
+        .footer-text{color:#0a3f0a;font-size:.7rem;text-align:center;margin-top:20px}
+        .blink{animation:blink 1s step-end infinite}
+        @keyframes blink{50%{opacity:0}}
+        
+        @media(max-width:500px){.terminal-body{padding:20px 16px}.ascii{font-size:.4rem}}
+    </style>
 </head>
-<body class="bg-gray-900 min-h-screen flex items-center justify-center">
-    <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-96">
-        <h1 class="text-2xl font-bold mb-6 text-center">🤖 MASKAI Dashboard</h1>
-        {% if error %}
-        <div class="bg-red-600 text-white p-3 rounded mb-4">{{ error }}</div>
-        {% endif %}
-        <form method="POST">
-            <input type="password" name="password" placeholder="Password" class="w-full p-3 rounded bg-gray-700 border border-gray-600 mb-4" autofocus>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-bold">Login</button>
-        </form>
+<body>
+    <canvas id="matrix"></canvas>
+    <div class="container">
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-dot dot-red"></span>
+                <span class="terminal-dot dot-yellow"></span>
+                <span class="terminal-dot dot-green"></span>
+                <span class="terminal-title">maskai@dashboard — bash — 80×24</span>
+            </div>
+            <div class="terminal-body">
+                <div class="ascii">
+ ███╗   ███╗ █████╗ ███████╗██╗  ██╗ █████╗ ██╗
+ ████╗ ████║██╔══██╗██╔════╝██║ ██╔╝██╔══██╗██║
+ ██╔████╔██║███████║███████╗█████╔╝ ███████║██║
+ ██║╚██╔╝██║██╔══██║╚════██║██╔═██╗ ██╔══██║██║
+ ██║ ╚═╝ ██║██║  ██║███████║██║  ██╗██║  ██║██║
+ ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝
+D A S H B O A R D   T E R M I N A L
+                </div>
+                
+                <div class="prompt">
+                    <span class="prompt-arrow">❯</span>
+                    <span class="prompt-path">~/maskai/dashboard</span>
+                </div>
+                
+                <form method="POST" autocomplete="off">
+                    <div class="input-line">
+                        <span style="color:#0a3f0a;font-size:.85rem">$</span>
+                        <input type="password" name="password" placeholder="Enter access code..." autofocus>
+                        <button type="submit" title="Execute">⏎</button>
+                    </div>
+                    {% if error %}
+                    <div class="error-text">[!] {{ error }}</div>
+                    {% endif %}
+                </form>
+                
+                <div class="footer-text">
+                    SYSTEM READY <span class="blink">▌</span> · PYTHON · JAVASCRIPT · SQL · YAML · SECURE
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script>
+    // Matrix rain effect
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789';
+    const fontSize = 14;
+    const columns = Math.floor(canvas.width / fontSize);
+    const drops = Array(columns).fill(1);
+    
+    function draw() {
+        ctx.fillStyle = 'rgba(0,0,0,.05)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = '#003300';
+        ctx.font = fontSize + 'px monospace';
+        for(let i=0;i<drops.length;i++){
+            const char = chars[Math.floor(Math.random()*chars.length)];
+            ctx.fillText(char,i*fontSize,drops[i]*fontSize);
+            if(drops[i]*fontSize>canvas.height && Math.random()>.975) drops[i]=0;
+            drops[i]++;
+        }
+    }
+    setInterval(draw,50);
+    window.onresize = () => {canvas.width=window.innerWidth;canvas.height=window.innerHeight};
+    </script>
 </body>
 </html>
