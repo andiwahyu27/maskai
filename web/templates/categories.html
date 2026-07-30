@@ -1,38 +1,82 @@
 {% extends "base.html" %}
 {% block content %}
-<div x-data="{cats:[],showAdd:false,editId:null,form:{name:'',type:'E',icon:'📦'}}"
-     x-init="let r=await fetch('/api/categories');cats=await r.json()">
+<div x-data="categoriesPage()" x-init="load()">
   <div class="flex justify-between mb-4">
     <h2 class="text-2xl font-bold">📋 Kategori</h2>
-    <button @click="showAdd=!showAdd;editId=null;form={name:'',type:'E',icon:'📦'}" class="bg-green-600 px-4 py-2 rounded">+ Tambah</button>
+    <button @click="openAdd()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition">+ Tambah</button>
   </div>
 
-  <div x-show="showAdd||editId" class="bg-gray-800 rounded p-4 mb-4">
+  <div x-show="showForm" class="bg-gray-800 rounded p-4 mb-4">
     <select x-model="form.type" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
       <option value="E">💳 Pengeluaran</option>
       <option value="I">💰 Pemasukan</option>
     </select>
     <input x-model="form.name" placeholder="Nama" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
-    <input x-model="form.icon" placeholder="Icon" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
-    <button @click="async()=>{
-      let m=editId?'PUT':'POST';
-      let r=await fetch('/api/categories',{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,id:editId})});
-      let d=await r.json();
-      if(d.ok){let rr=await fetch('/api/categories');cats=await rr.json();showAdd=false;editId=null}
-    }" class="bg-blue-600 px-4 py-2 rounded" x-text="editId?'Update':'Simpan'"></button>
-    <button @click="showAdd=false;editId=null" class="bg-gray-600 px-4 py-2 rounded ml-2">Batal</button>
+    <input x-model="form.icon" placeholder="Icon emoji" class="bg-gray-700 border border-gray-600 rounded p-2 mb-2 w-full">
+    <button @click="save()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded transition" x-text="editId ? 'Update' : 'Simpan'"></button>
+    <button @click="showForm=false;editId=null" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded ml-2 transition">Batal</button>
   </div>
 
   <div class="bg-gray-800 rounded">
-    <template x-for="c in cats">
+    <template x-for="c in cats" :key="c.id">
       <div class="flex justify-between items-center p-3 border-b border-gray-700">
         <span><span x-text="c.icon"></span> <span x-text="c.name"></span> <span class="text-xs text-gray-500" x-text="c.type=='I'?'💰':'💳'"></span></span>
         <span>
-          <button @click="editId=c.id;form={name:c.name,type:c.type,icon:c.icon};showAdd=false" class="text-blue-400 mr-2">✏️</button>
-          <button @click="await fetch('/api/categories?id='+c.id,{method:'DELETE'});let rr=await fetch('/api/categories');cats=await rr.json()" class="text-red-400">🗑</button>
+          <button @click="editCat(c)" class="text-blue-400 hover:text-blue-300 mr-2">✏️</button>
+          <button @click="delCat(c.id)" class="text-red-400 hover:text-red-300">🗑</button>
         </span>
       </div>
     </template>
   </div>
 </div>
+
+<script>
+function categoriesPage() {
+  return {
+    cats: [],
+    showForm: false,
+    editId: null,
+    form: { name: '', type: 'E', icon: '📦' },
+    
+    async load() {
+      try {
+        let r = await fetch('/api/categories');
+        this.cats = await r.json();
+      } catch(e) { console.error(e); }
+    },
+    
+    openAdd() {
+      this.form = { name: '', type: 'E', icon: '📦' };
+      this.editId = null;
+      this.showForm = true;
+    },
+    
+    editCat(c) {
+      this.form = { name: c.name, type: c.type, icon: c.icon };
+      this.editId = c.id;
+      this.showForm = true;
+    },
+    
+    async save() {
+      let method = this.editId ? 'PUT' : 'POST';
+      let body = { ...this.form };
+      if (this.editId) body.id = this.editId;
+      await fetch('/api/categories', {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      this.showForm = false;
+      this.editId = null;
+      await this.load();
+    },
+    
+    async delCat(id) {
+      if (!confirm('Hapus kategori ini?')) return;
+      await fetch('/api/categories?id=' + id, { method: 'DELETE' });
+      await this.load();
+    }
+  }
+}
+</script>
 {% endblock %}

@@ -1,45 +1,98 @@
 {% extends "base.html" %}
 {% block content %}
-<div x-data="{status:{},recent:[],ts:0}" x-init="
-  setInterval(async()=>{
-    let r=await fetch('/api/status');status=await r.json();
-    recent=status.recent;ts=Date.now()
-  },5000)
-">
+<div x-data="dashboard()" x-init="init()">
   <h2 class="text-2xl font-bold mb-4">📊 Dashboard</h2>
 
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-    <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-2xl" x-text="status.bot_running?'🟢':'🔴'"></span>
+  <!-- Loading Overlay -->
+  <div x-show="loading" x-transition class="bg-gray-800 border border-gray-600 rounded-lg p-8 mb-4 text-center">
+    <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-gray-600 border-t-blue-500 mb-3"></div>
+    <p class="text-gray-400">⏳ Memuat data dashboard...</p>
+  </div>
+
+  <!-- Stats -->
+  <div x-show="!loading" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="bg-gray-800 rounded p-4 text-center" :class="{'border border-green-500': data.bot_running, 'border border-red-500': !data.bot_running}">
+      <span class="text-2xl" x-text="data.bot_running ? '🟢' : '🔴'"></span>
       <p class="text-sm text-gray-400">Bot</p>
     </div>
     <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-xl font-bold" x-text="'Rp '+(status.balance||0).toLocaleString('id-ID')"></span>
+      <span class="text-xl font-bold" x-text="'Rp '+(data.balance||0).toLocaleString('id-ID')"></span>
       <p class="text-xs text-gray-400">Saldo</p>
     </div>
     <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-xl font-bold" x-text="status.counts?.maskai_transactions||0"></span>
-      <p class="text-xs text-gray-400">Transaksi</p>
+      <span class="text-lg font-bold text-green-400" x-text="'Rp '+(data.income||0).toLocaleString('id-ID')"></span>
+      <p class="text-xs text-gray-400">📥 Pemasukan</p>
     </div>
     <div class="bg-gray-800 rounded p-4 text-center">
-      <span class="text-xl font-bold" x-text="Math.floor((status.uptime||0)/3600)+'h'"></span>
-      <p class="text-xs text-gray-400">Uptime</p>
+      <span class="text-lg font-bold text-red-400" x-text="'Rp '+(data.expense||0).toLocaleString('id-ID')"></span>
+      <p class="text-xs text-gray-400">📤 Pengeluaran</p>
     </div>
   </div>
 
-  <div class="grid grid-cols-2 gap-3 mb-4">
-    <button onclick="fetch('/api/sync')" class="bg-blue-600 p-3 rounded">📊 Sync Sheets</button>
-    <button onclick="fetch('/api/restart')" class="bg-yellow-600 p-3 rounded">🔄 Restart Bot</button>
+  <!-- Actions -->
+  <div x-show="!loading" class="grid grid-cols-2 gap-3 mb-4">
+    <button @click="sync()" class="bg-blue-600 hover:bg-blue-700 p-3 rounded transition">📊 Sync Sheets</button>
+    <button @click="restart()" class="bg-yellow-600 hover:bg-yellow-700 p-3 rounded transition">🔄 Restart Bot</button>
   </div>
 
-  <div class="bg-gray-800 rounded p-4">
+  <!-- Recent Transactions -->
+  <div x-show="!loading" class="bg-gray-800 rounded p-4">
     <h3 class="font-bold mb-2">📋 Transaksi Terbaru</h3>
-    <template x-for="t in (recent||[]).slice(0,5)">
+    <template x-for="t in data.recent || []" :key="t.id || Math.random()">
       <div class="flex justify-between py-1 border-b border-gray-700 text-sm">
-        <span x-text="(t.type=='I'?'📥':'📤')+' Rp '+(t.amount||0).toLocaleString('id-ID')"></span>
-        <span class="text-gray-500" x-text="t.transaction_dt?.slice(0,10)"></span>
+        <span x-text="(t.type=='I' ? '📥' : '📤') + ' Rp ' + (t.amount||0).toLocaleString('id-ID')"></span>
+        <span class="text-gray-500" x-text="(t.transaction_dt||'').slice(0,10)"></span>
       </div>
     </template>
+    <div x-show="data.recent && data.recent.length == 0" class="text-gray-500 text-sm py-4 text-center">
+      Belum ada transaksi
+    </div>
   </div>
 </div>
+
+<script>
+function dashboard() {
+  return {
+    data: { bot_running: false, balance: 0, income: 0, expense: 0, recent: [] },
+    loading: true,
+    
+    async init() {
+      await this.loadData();
+    },
+    
+    async loadData() {
+      try {
+        let r = await fetch('/api/status');
+        if (!r.ok) throw new Error('API error: ' + r.status);
+        this.data = await r.json();
+      } catch(e) {
+        console.error('Dashboard load error:', e);
+      }
+      this.loading = false;
+    },
+    
+    async sync() {
+      try {
+        let r = await fetch('/api/sync');
+        let d = await r.json();
+        alert(d.ok ? ('✅ ' + d.count + ' transaksi disinkron!') : ('❌ Error: ' + d.error));
+      } catch(e) {
+        alert('❌ Gagal sync: ' + e);
+      }
+    },
+    
+    async restart() {
+      if (!confirm('Yakin restart bot?')) return;
+      try {
+        await fetch('/api/restart');
+        alert('✅ Bot direstart!');
+        this.loading = true;
+        setTimeout(async () => await this.loadData(), 3000);
+      } catch(e) {
+        alert('❌ Gagal restart: ' + e);
+      }
+    }
+  }
+}
+</script>
 {% endblock %}

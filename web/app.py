@@ -115,21 +115,27 @@ def api_status():
     bal = supabase_get("maskai_balance", {"user_id": "eq.1367356347", "select": "balance"})
     balance = bal[0]["balance"] if bal else 0
 
-    # Recent tx
+    # Recent tx for income/expense calc
     txs = supabase_get("maskai_transactions", {
         "user_id": "eq.1367356347", "select": "amount,type,transaction_dt",
-        "order": "transaction_dt.desc", "limit": "7"
+        "order": "transaction_dt.desc", "limit": "100"
     })
-
+    
+    # Calculate totals
+    income = sum(t["amount"] for t in txs if t["type"] == "I")
+    expense = sum(t["amount"] for t in txs if t["type"] == "E")
+    
     # Bot process
     bot_running = os.system("systemctl is-active --quiet maskai-bot.service") == 0
-
+    
     return jsonify({
         "uptime": uptime,
         "bot_running": bot_running,
         "balance": balance,
+        "income": income,
+        "expense": expense,
         "counts": counts,
-        "recent": txs
+        "recent": txs[:7]
     })
 
 @app.route("/api/transactions")
