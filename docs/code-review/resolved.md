@@ -1,10 +1,13 @@
 # Resolved Review Issues
 
 ## CR-001
-Status: Pending
-Files: -
-Validation: -
-Notes: Phase 1 — Authorization boundary
+Status: Done
+Files: bot.py, tests/test_auth.py
+Validation:
+- test_admin_authorized: passed
+- test_unknown_rejected: passed
+- test_admin_ids_is_list: passed
+Notes: Authorization guard in process() before routing. No callback queries in v2.
 
 ## CR-002
 Status: Pending

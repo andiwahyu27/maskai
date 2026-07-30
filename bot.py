@@ -17,35 +17,73 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("maskai")
 BOT_START_TIME = time.time()
 ADMIN_IDS = [1367356347]
+pending = {}  # pending date responses
+
+def is_authorized(user_id):
+    return user_id in ADMIN_IDS
+
+def log_security(action, user_id, detail=""):
+    log.warning(f"SECURITY | {action} | user={user_id} | {detail}")
+
+# ── API Helpers ──
+class ApiResult:
+    """Typed API result"""
+    def __init__(self, ok, data=None, status=None, error=None):
+        self.ok = ok
+        self.data = data
+        self.status = status
+        self.error = error
 
 def api_get(url, **kw):
-    """Safe API call with error handling"""
+    """Safe GET with typed result"""
     try:
-        r = requests.get(url, timeout=15, **kw)
+        r = requests.get(url, timeout=kw.pop("timeout", 15), **kw)
         if r.status_code != 200:
-            log.warning(f"API {r.status_code}: {r.text[:100]}")
-            return {}
-        return r.json() if r.text else {}
+            log.warning(f"API GET {r.status_code}: {r.text[:100]}")
+            return ApiResult(False, status=r.status_code, error=r.text[:200])
+        return ApiResult(True, data=r.json() if r.text else {}, status=200)
+    except requests.Timeout:
+        log.error(f"API GET timeout: {url[:80]}")
+        return ApiResult(False, error="timeout")
+    except requests.ConnectionError:
+        log.error(f"API GET connection: {url[:80]}")
+        return ApiResult(False, error="connection")
+    except ValueError as e:
+        log.error(f"API GET invalid JSON: {e}")
+        return ApiResult(False, error="invalid_json")
     except Exception as e:
         log.error(f"API GET error: {e}")
-        return {}
+        return ApiResult(False, error=str(e)[:200])
 
 def api_post(url, json=None, data=None, **kw):
-    """Safe POST with error handling"""
+    """Safe POST with typed result"""
     try:
-        r = requests.post(url, json=json, data=data, timeout=15, **kw)
+        r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", 15), **kw)
         if r.status_code not in (200, 201):
             log.warning(f"API POST {r.status_code}: {r.text[:100]}")
-            return {}
-        return r.json() if r.text else {}
+            return ApiResult(False, status=r.status_code, error=r.text[:200])
+        return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
+    except requests.Timeout:
+        log.error(f"API POST timeout: {url[:80]}")
+        return ApiResult(False, error="timeout")
+    except requests.ConnectionError:
+        log.error(f"API POST connection: {url[:80]}")
+        return ApiResult(False, error="connection")
+    except ValueError as e:
+        log.error(f"API POST invalid JSON: {e}")
+        return ApiResult(False, error="invalid_json")
     except Exception as e:
         log.error(f"API POST error: {e}")
-        return {}
+        return ApiResult(False, error=str(e)[:200])
 
 def tg(method, data=None):
     """Telegram API call"""
     url = f"{TELEGRAM_API}/{method}"
-    return api_post(url, json=data) if data else api_get(url)
+    if data:
+        result = api_post(url, json=data)
+    else:
+        result = api_get(url)
+    return result.data if result.ok else {"ok": False, "error": result.error}
 
 def send(chat_id, text, parse_mode=None, reply_markup=None):
     """Send Telegram message"""
@@ -448,6 +486,11 @@ def process(msg):
     photo = msg.get("photo")
 
     if not chat_id: return
+
+    if not is_authorized(user_id):
+        log_security("unauthorized", user_id, f"text={text[:50]}")
+        send(chat_id, "❌ Akses tidak diizinkan.")
+        return
 
     if photo:
         cmd_ocr(chat_id, photo[-1]["file_id"])
