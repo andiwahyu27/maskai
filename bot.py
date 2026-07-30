@@ -151,6 +151,60 @@ def supabase_delete(table, field, value):
     r = requests.delete(url, headers=SUPABASE_HEADERS, timeout=10)
     return r.status_code in (200, 204)
 
+def supabase_patch(table, filters, data):
+    """Supabase PATCH with multiple filters. filters: list of (field, value) tuples"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    if filters:
+        q = "&".join(f"{k}=eq.{v}" for k, v in filters)
+        url += f"?{q}"
+    result = api_post(url, json=data, headers=SUPABASE_HEADERS)
+    return result.data if result.ok else None
+
+# ── Category Ownership Helpers ──
+def get_accessible_category(cat_id, user_id):
+    """Get category if user can access it (global or owned)"""
+    cats = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,name,icon,type,user_id"})
+    if not cats:
+        return None
+    cat = cats[0]
+    if cat.get("user_id") not in (0, user_id):
+        return None
+    return cat
+
+def is_category_owner(cat, user_id):
+    """Check if user owns this category (not global, not other user)"""
+    return cat and cat.get("user_id") == user_id
+
+def list_accessible_categories(user_id):
+    """List categories visible to user: own + global"""
+    # Use two queries — Supabase doesn't support OR
+    own = supabase_get("maskai_categories", {"user_id": f"eq.{user_id}", "select": "id,name,icon,type,user_id"})
+    global_cats = supabase_get("maskai_categories", {"user_id": "eq.0", "select": "id,name,icon,type,user_id"})
+    return (own or []) + (global_cats or [])
+
+def delete_owned_category(cat_id, user_id):
+    """Delete category if user owns it. Returns (ok, error_msg)"""
+    cat = get_accessible_category(cat_id, user_id)
+    if not cat:
+        return False, "Kategori tidak ditemukan"
+    if cat.get("user_id") == 0:
+        return False, "Kategori global tidak bisa dihapus"
+    if not supabase_delete("maskai_categories", "id", cat_id):
+        return False, "Gagal menghapus"
+    return True, None
+
+def update_owned_category(cat_id, user_id, payload):
+    """Update category if user owns it. Returns (ok, error_msg)"""
+    cat = get_accessible_category(cat_id, user_id)
+    if not cat:
+        return False, "Kategori tidak ditemukan"
+    if cat.get("user_id") == 0:
+        return False, "Kategori global tidak bisa diedit"
+    result = supabase_patch("maskai_categories", [("id", cat_id)], payload)
+    if not result:
+        return False, "Gagal update"
+    return True, None
+
 # ── Commands ──
 
 def cmd_start(chat_id):
@@ -276,8 +330,9 @@ def cmd_keranjang(chat_id, user_id, text):
         "description": " ".join(args[1:]) or "-"})
     send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="Markdown")
 
-def cmd_kategori(chat_id):
-    cats = supabase_get("maskai_categories", {"select": "id,name,icon,type", "order": "id.asc"})
+def cmd_kategori(chat_id, user_id):
+    """List categories accessible to user"""
+    cats = list_accessible_categories(user_id)
     if not cats:
         send(chat_id, "Belum ada kategori.")
         return
@@ -285,46 +340,37 @@ def cmd_kategori(chat_id):
     for c in cats:
         icon = c.get("icon", "📦")
         tipe = "💰" if c["type"] == "I" else "💳"
-        msg += f"\n#{c['id']} {icon} {c['name']} {tipe}"
+        global_tag = " 🌐" if c.get("user_id") == 0 else ""
+        msg += f"\n#{c['id']} {icon} {c['name']} {tipe}{global_tag}"
     msg += "\n\n/editkat <id> <nama>\n/hapuskat <id>\n/tambahkat <I/E> <nama>"
     send(chat_id, msg, parse_mode="Markdown")
 
-def cmd_editkat(chat_id, text):
+def cmd_editkat(chat_id, user_id, text):
+    """Edit category with ownership check"""
     parts = text.strip().split()
     if len(parts) < 3:
         send(chat_id, "Format: /editkat <id> <nama baru>")
         return
     cat_id = parts[1]
     new_name = " ".join(parts[2:])
-    try:
-        r = requests.patch(f"{SUPABASE_URL}/rest/v1/maskai_categories?id=eq.{cat_id}",
-            json={"name": new_name}, headers=SUPABASE_HEADERS, timeout=10)
-        if r.status_code in (200, 204):
-            send(chat_id, f"✅ Kategori #{cat_id} diubah jadi *{new_name}*", parse_mode="Markdown")
-        else:
-            send(chat_id, f"❌ Gagal edit kategori.")
-    except Exception as e:
-        send(chat_id, f"❌ Error: {e}")
+    ok, err = update_owned_category(cat_id, user_id, {"name": new_name})
+    if ok:
+        send(chat_id, f"✅ Kategori #{cat_id} diubah jadi *{escape_md(new_name)}*", parse_mode="Markdown")
+    else:
+        send(chat_id, f"❌ {err}")
 
 def cmd_hapuskat(chat_id, user_id, text):
+    """Delete category with ownership check"""
     parts = text.strip().split()
     if len(parts) < 2:
         send(chat_id, "Format: /hapuskat <id>")
         return
     cat_id = parts[1]
-    # Ownership check: delete only if user owns it OR it's not global
-    cats = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,user_id,type"})
-    if not cats:
-        send(chat_id, "❌ Kategori tidak ditemukan.")
-        return
-    cat = cats[0]
-    if cat.get("user_id") == 0:
-        send(chat_id, "❌ Kategori global tidak bisa dihapus.")
-        return
-    if supabase_delete("maskai_categories", "id", cat_id):
+    ok, err = delete_owned_category(cat_id, user_id)
+    if ok:
         send(chat_id, f"✅ Kategori #{cat_id} dihapus.")
     else:
-        send(chat_id, "❌ Gagal hapus kategori.")
+        send(chat_id, f"❌ {err}")
 
 def cmd_tambahkat(chat_id, user_id, text):
     """Add category with user ownership, multi-word name support"""
@@ -599,9 +645,9 @@ def process(msg):
     elif cmd == "/keranjang":
         cmd_keranjang(chat_id, user_id, args)
     elif cmd == "/kategori":
-        cmd_kategori(chat_id)
+        cmd_kategori(chat_id, user_id)
     elif cmd == "/editkat":
-        cmd_editkat(chat_id, args)
+        cmd_editkat(chat_id, user_id, args)
     elif cmd == "/hapuskat":
         cmd_hapuskat(chat_id, user_id, args)
     elif cmd == "/tambahkat":
@@ -759,24 +805,33 @@ def main():
                         tg("answerCallbackQuery", {"callback_query_id": cb.get("id"), "text": ""})
                         # Route callbacks
                         if data_cb == "menu_kategori":
-                            cmd_kategori(chat_id)
+                            cmd_kategori(chat_id, cb_user_id)
                         elif data_cb.startswith("kategori_"):
-                            # Show category detail with simple inline edit/delete
+                            # Show category detail — ownership-filtered
                             cat_id = data_cb.split("_")[1]
-                            cats = supabase_get("maskai_categories", {"select": "id,name,icon,type"})
-                            cat = next((c for c in cats if str(c["id"]) == cat_id), None)
-                            if cat:
-                                label = "Pemasukan" if cat["type"] == "I" else "Pengeluaran"
-                                keyboard = {"inline_keyboard": [
-                                    [{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"},
-                                     {"text": "🔙 Kembali", "callback_data": "menu_kategori"}]
-                                ]}
-                                send(chat_id, f"📋 *{cat.get('icon','📦')} {cat['name']}*\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="Markdown", reply_markup=keyboard)
+                            cat = get_accessible_category(cat_id, cb_user_id)
+                            if not cat:
+                                tg("answerCallbackQuery", {"callback_query_id": cb.get("id"), "text": "Kategori tidak ditemukan"})
+                                continue
+                            label = "Pemasukan" if cat["type"] == "I" else "Pengeluaran"
+                            keyboard = {"inline_keyboard": []}
+                            if is_category_owner(cat, cb_user_id):
+                                keyboard["inline_keyboard"].append(
+                                    [{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"}]
+                                )
+                            keyboard["inline_keyboard"].append(
+                                [{"text": "🔙 Kembali", "callback_data": "menu_kategori"}]
+                            )
+                            send(chat_id, f"📋 *{escape_md(cat.get('icon','📦'))} {escape_md(cat['name'])}*\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="Markdown", reply_markup=keyboard)
                         elif data_cb.startswith("katdelok_"):
                             cat_id = data_cb.split("_")[1]
-                            supabase_delete("maskai_categories", "id", cat_id)
-                            send(chat_id, f"✅ Kategori #{cat_id} dihapus.")
-                            cmd_kategori(chat_id)
+                            ok, err = delete_owned_category(cat_id, cb_user_id)
+                            if ok:
+                                send(chat_id, f"✅ Kategori #{cat_id} dihapus.")
+                                cmd_kategori(chat_id, cb_user_id)
+                            else:
+                                tg("answerCallbackQuery", {"callback_query_id": cb.get("id"), "text": err})
+                                send(chat_id, f"❌ {err}")
                 except Exception as e:
                     log.error(f"Update error: {e}")
 
