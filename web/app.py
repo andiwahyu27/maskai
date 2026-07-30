@@ -286,6 +286,18 @@ def api_sync():
         rows = []
         for t in txs:
             created = t.get("created_at", "")
+            if created:
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    wib = dt + timedelta(hours=7)
+                    tgl_input = wib.strftime("%Y-%m-%d")
+                    waktu_input = wib.strftime("%H:%M:%S")
+                except:
+                    tgl_input = created[:10] if len(created) >= 10 else "-"
+                    waktu_input = created[11:19] if len(created) >= 19 else "-"
+            else:
+                tgl_input = "-"
+                waktu_input = "-"
             rows.append([
                 str(t["id"]),
                 "Pemasukan" if t["type"] == "I" else "Pengeluaran",
@@ -293,8 +305,8 @@ def api_sync():
                 cats.get(t.get("category_id"), "-"),
                 t.get("description", "-"),
                 t["transaction_dt"][:10],
-                created[:10] if created else "-",
-                created[11:19] if created else "-"
+                tgl_input,
+                waktu_input
             ])
         
         for i in range(0, len(rows), 500):
