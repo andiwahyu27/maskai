@@ -306,18 +306,28 @@ def cmd_editkat(chat_id, text):
     except Exception as e:
         send(chat_id, f"❌ Error: {e}")
 
-def cmd_hapuskat(chat_id, text):
+def cmd_hapuskat(chat_id, user_id, text):
     parts = text.strip().split()
     if len(parts) < 2:
         send(chat_id, "Format: /hapuskat <id>")
         return
     cat_id = parts[1]
+    # Ownership check: delete only if user owns it OR it's not global
+    cats = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,user_id,type"})
+    if not cats:
+        send(chat_id, "❌ Kategori tidak ditemukan.")
+        return
+    cat = cats[0]
+    if cat.get("user_id") == 0:
+        send(chat_id, "❌ Kategori global tidak bisa dihapus.")
+        return
     if supabase_delete("maskai_categories", "id", cat_id):
         send(chat_id, f"✅ Kategori #{cat_id} dihapus.")
     else:
         send(chat_id, "❌ Gagal hapus kategori.")
 
-def cmd_tambahkat(chat_id, text):
+def cmd_tambahkat(chat_id, user_id, text):
+    """Add category with user ownership, multi-word name support"""
     parts = text.strip().split()
     if len(parts) < 3:
         send(chat_id, "Format: /tambahkat <I/E> <nama> [icon]")
@@ -326,12 +336,21 @@ def cmd_tambahkat(chat_id, text):
     if tx_type not in ("I", "E"):
         send(chat_id, "Tipe harus I (Pemasukan) atau E (Pengeluaran)")
         return
-    name = parts[2]
-    icon = parts[3] if len(parts) > 3 else None
-    data = {"name": name, "type": tx_type}
-    if icon: data["icon"] = icon
-    supabase_post("maskai_categories", data)
-    send(chat_id, f"✅ Kategori *{name}* ({'Pemasukan' if tx_type=='I' else 'Pengeluaran'}) ditambahkan.", parse_mode="Markdown")
+    # Multi-word name: join all words, detect trailing emoji
+    name_parts = parts[2:]
+    icon = "📦"
+    if len(name_parts[-1]) == 1 and len(name_parts) > 1:
+        icon = name_parts.pop()
+    name = " ".join(name_parts)
+    if not name:
+        send(chat_id, "❌ Nama kategori tidak boleh kosong.")
+        return
+    data = {"name": name, "type": tx_type, "icon": icon, "user_id": user_id}
+    result = supabase_post("maskai_categories", data)
+    if result:
+        send(chat_id, f"✅ Kategori *{escape_md(name)}* ({'Pemasukan' if tx_type=='I' else 'Pengeluaran'}) ditambahkan.", parse_mode="Markdown")
+    else:
+        send(chat_id, "❌ Gagal menambah kategori.")
 
 def cmd_menu(chat_id):
     """Simple menu without inline keyboard"""
@@ -584,9 +603,9 @@ def process(msg):
     elif cmd == "/editkat":
         cmd_editkat(chat_id, args)
     elif cmd == "/hapuskat":
-        cmd_hapuskat(chat_id, args)
+        cmd_hapuskat(chat_id, user_id, args)
     elif cmd == "/tambahkat":
-        cmd_tambahkat(chat_id, args)
+        cmd_tambahkat(chat_id, user_id, text)
     elif cmd in ("/laporan", "/report", "/r"):
         cmd_laporan(chat_id, user_id, args)
     elif cmd == "/status":
@@ -727,6 +746,13 @@ def main():
                             os.rename(OFFSET_FILE + ".tmp", OFFSET_FILE)
                             return
                     elif cb:
+                        # Auth check for callback
+                        cb_user_id = cb.get("from", {}).get("id", 0)
+                        if not is_authorized(cb_user_id):
+                            log_security("unauthorized_callback", cb_user_id)
+                            tg("answerCallbackQuery", {"callback_query_id": cb.get("id"), "text": "Akses tidak diizinkan"})
+                            offset = upd["update_id"] + 1
+                            continue
                         # Simple callback handler for inline buttons
                         chat_id = cb.get("message", {}).get("chat", {}).get("id")
                         data_cb = cb.get("data", "")
