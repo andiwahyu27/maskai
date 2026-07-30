@@ -10,7 +10,11 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 DAHONO_KEY = os.environ.get("DAHONO_KEY", "")
 DAHONO_URL = "https://gateway.dahono.com/v1"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-OFFSET_FILE = "/tmp/maskai_offset.txt"
+OFFSET_FILE = os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt")
+try:
+    os.makedirs(os.path.dirname(OFFSET_FILE), exist_ok=True)
+except PermissionError:
+    OFFSET_FILE = "/tmp/maskai_offset.txt"
 SUPABASE_HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -18,6 +22,9 @@ log = logging.getLogger("maskai")
 BOT_START_TIME = time.time()
 ADMIN_IDS = [1367356347]
 pending = {}  # pending date responses
+
+from zoneinfo import ZoneInfo
+TZ = ZoneInfo(os.environ.get("TZ", "Asia/Jakarta"))
 
 def is_authorized(user_id):
     return user_id in ADMIN_IDS
@@ -177,7 +184,7 @@ def cmd_start(chat_id):
 def cmd_laporan(chat_id, user_id, text):
     """Handle /laporan"""
     parts = text.strip().split()
-    now = datetime.utcnow()
+    now = datetime.now(TZ)
 
     if len(parts) == 3:  # date range
         try:
@@ -388,7 +395,7 @@ def cmd_ocr(chat_id, user_id, file_id):
     supabase_post("maskai_transactions", {
         "user_id": user_id, "type": "E", "amount": data.get("total", 0),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
-        "transaction_dt": data.get("tanggal", datetime.utcnow().strftime("%Y-%m-%d")), "currency": "IDR"
+        "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR"
     })
     send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
 
@@ -715,8 +722,9 @@ def main():
                         if result == "__STOP__":
                             log.info("Stop signal received, exiting...")
                             offset = upd["update_id"] + 1
-                            with open(OFFSET_FILE, "w") as f:
+                            with open(OFFSET_FILE + ".tmp", "w") as f:
                                 f.write(str(offset))
+                            os.rename(OFFSET_FILE + ".tmp", OFFSET_FILE)
                             return
                     elif cb:
                         # Simple callback handler for inline buttons
