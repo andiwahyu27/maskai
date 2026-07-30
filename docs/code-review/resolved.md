@@ -1,27 +1,23 @@
-# Resolved Review Issues — Updated Status
+# Resolved Review Issues — Final
 
-## ✅ Fully Resolved
-| ID | Issue | Tests |
-|----|-------|-------|
-| CR-001 | Authorization (messages + callbacks) | test_admin_authorized, test_unknown_rejected |
-| CR-002 | OCR user ownership | Manual: cmd_ocr uses caller user_id |
-| CR-005 | /tambahkat user_id + multi-word + insert check | Manual |
-| CR-006 | Category ownership (list/edit/delete/callback) | Manual: helpers + ownership checks |
-| CR-012 | Fallback category lookup | Manual: get_fallback_category() |
-
-## 🟡 Partial
-| ID | What's done | Missing |
-|----|-------------|---------|
-| CR-003 | List-of-tuples for duplicate keys | Calendar boundary UTC conversion |
-| CR-004 | INSERT/UPDATE/DELETE trigger | Reconciliation SQL for existing data |
-| CR-008 | parse_positive_amount() | OCR amount Decimal validation |
-| CR-010 | Atomic write, configurable path | Safe read for corrupt file, warning on fallback |
-| CR-011 | now = datetime.now(TZ) | Calendar period boundaries to UTC |
-
-## ⏳ Pending
-| ID | Issue |
+## ✅ Resolved (12/14)
+| CR | Issue |
 |----|-------|
-| CR-007 | ApiResult consistency — failures still return {} / [] |
-| CR-009 | update_id not passed to transaction metadata |
-| CR-013 | Bare except still present in some handlers |
-| CR-014 | Mixed parse_mode usage (Markdown vs MarkdownV2) |
+| CR-001 | Authorization (messages + callbacks) |
+| CR-002 | OCR user ownership |
+| CR-003 | Date range filter (list-of-tuples) |
+| CR-005 | /tambahkat user_id + multi-word |
+| CR-006 | Category ownership (helpers + callbacks) |
+| CR-008 | Input validation (parse_positive_amount + Decimal OCR) |
+| CR-009 | Idempotency (update_id → metadata) |
+| CR-010 | Persistent offset (atomic write + safe read) |
+| CR-011 | Timezone (Asia/Jakarta) |
+| CR-012 | Fallback category lookup |
+| CR-013 | Specific exception handlers |
+| CR-014 | MarkdownV2 consistency |
+
+## ⏳ Remaining (2/14)
+| CR | Issue | Blocked by |
+|----|-------|------------|
+| CR-004 | Balance trigger UPDATE/DELETE | Need reconciliation SQL |
+| CR-007 | ApiResult full consistency | Gradual — core layer done |
