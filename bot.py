@@ -448,7 +448,7 @@ def process(msg):
             
             # Fetch all transactions
             txs = supabase_get("maskai_transactions", {
-                "select": "id,type,amount,description,transaction_dt,category_id",
+                "select": "id,type,amount,description,transaction_dt,created_at,category_id",
                 "order": "id.asc"
             })
             cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
@@ -459,17 +459,20 @@ def process(msg):
             
             # Clear and rewrite
             sheet.clear()
-            sheet.append_row(["ID", "Jenis", "Jumlah", "Kategori", "Deskripsi", "Tanggal"])
+            sheet.append_row(["ID", "Jenis", "Jumlah", "Kategori", "Deskripsi", "TANGGAL TRANSAKSI", "TANGGAL INPUT", "WAKTU INPUT"])
             
             rows = []
             for t in txs:
+                created = t.get("created_at", "")
                 rows.append([
                     str(t["id"]),
                     "Pemasukan" if t["type"] == "I" else "Pengeluaran",
                     t["amount"],
                     cats.get(t.get("category_id"), "-"),
                     t.get("description", "-"),
-                    t["transaction_dt"][:10]
+                    t["transaction_dt"][:10],
+                    created[:10] if created else "-",
+                    created[11:19] if created else "-"
                 ])
             
             # Batch append (max 1000 per batch)
