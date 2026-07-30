@@ -39,8 +39,8 @@
   </div>
 
   <!-- Recent -->
-  <div id="recent-box" class="card" style="display:none">
-    <h3 style="font-size:1rem;margin-bottom:8px">📋 Transaksi Terbaru</h3>
+  <div id="recent-box" class="card" style="display:none;overflow-x:auto;padding:0">
+    <h3 style="font-size:1rem;padding:12px 16px">📋 Transaksi Terbaru</h3>
     <div id="recent-list"></div>
   </div>
 </div>
@@ -66,13 +66,17 @@ async function load() {
     
     // Recent transactions
     let list = document.getElementById('recent-list');
-    list.innerHTML = '';
     if (d.recent && d.recent.length > 0) {
+      let html = '<table class="table w-full"><thead><tr><th>Tgl</th><th class="text-right">Jumlah</th><th>Deskripsi</th></tr></thead><tbody>';
       for (let t of d.recent) {
-        list.innerHTML += '<div class="flex justify-between p2" style="border-bottom:1px solid #374151">' +
-          '<span>' + (t.type=='I'?'📥':'📤') + ' Rp ' + (t.amount||0).toLocaleString('id-ID') + '</span>' +
-          '<span class="text-gray text-sm">' + (t.transaction_dt||'').slice(0,10) + '</span></div>';
+        html += '<tr>' +
+          '<td>' + (t.transaction_dt||'').slice(0,10) + '</td>' +
+          '<td class="text-right ' + (t.type=='I'?'text-green':'text-red') + '">Rp ' + (t.amount||0).toLocaleString('id-ID') + '</td>' +
+          '<td class="text-gray">' + (t.description||'-') + '</td>' +
+        '</tr>';
       }
+      html += '</tbody></table>';
+      list.innerHTML = html;
     } else {
       list.innerHTML = '<div class="text-gray text-center p4">Belum ada transaksi</div>';
     }
