@@ -434,7 +434,6 @@ def process(msg):
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
-        send(chat_id, "⏳ Sinkronisasi ke Google Sheets...")
         try:
             import gspread
             from oauth2client.service_account import ServiceAccountCredentials
@@ -494,7 +493,7 @@ def process(msg):
                 sheet.append_rows(rows[i:i+500])
             
             count = len(txs)
-            send(chat_id, f"✅ *Sync selesai!*\n{count} transaksi → Google Sheets\n📊 https://docs.google.com/spreadsheets/d/{sheet_id}", parse_mode="Markdown")
+            send(chat_id, f"✅ Sudah dilakukan sinkronisasi ke Google Sheets.\n{count} transaksi berhasil disinkron.\nSilahkan cek: https://docs.google.com/spreadsheets/d/{sheet_id}", parse_mode="Markdown")
             
         except Exception as e:
             log.error(f"Sync error: {e}")
