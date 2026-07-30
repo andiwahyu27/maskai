@@ -75,7 +75,7 @@ def api_get(url, **kw):
         if r.status_code != 200:
             log.warning(f"API GET {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data=r.json() if r.text else {}, status=200)
+        return ApiResult(True, data=r.json() if r.text else None, status=200)
     except requests.Timeout:
         log.error(f"API GET timeout: {url[:80]}")
         return ApiResult(False, error="timeout")
@@ -169,7 +169,10 @@ def api_patch(url, json=None, **kw):
         if r.status_code not in (200, 201, 204):
             log.warning(f"API PATCH {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
+        # 204 has no body
+        if r.status_code == 204:
+            return ApiResult(True, status=204)
+        return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
     except requests.Timeout:
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
@@ -186,7 +189,7 @@ def api_delete(url, **kw):
         if r.status_code not in (200, 204):
             log.warning(f"API DELETE {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data={}, status=r.status_code)
+        return ApiResult(True, status=r.status_code)
     except requests.Timeout:
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
