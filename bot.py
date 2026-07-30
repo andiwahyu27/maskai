@@ -452,13 +452,27 @@ def cmd_ocr(chat_id, user_id, file_id):
         send(chat_id, "❌ Struk tidak jelas. Coba foto ulang.")
         return
 
+    # Validate OCR amount using Decimal
+    from decimal import Decimal, InvalidOperation
+    try:
+        total = Decimal(str(data.get("total", 0)))
+        if total <= 0:
+            send(chat_id, "❌ Jumlah di struk tidak valid.")
+            return
+        if total > 999999999.99:
+            send(chat_id, "❌ Jumlah terlalu besar.")
+            return
+    except (InvalidOperation, ValueError):
+        send(chat_id, "❌ Jumlah di struk tidak valid.")
+        return
+
     fallback_cat = get_fallback_category(user_id, "E")
     if not fallback_cat:
         send(chat_id, "❌ Gagal menyimpan — kategori default tidak ditemukan.")
         return
 
     supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": "E", "amount": data.get("total", 0),
+        "user_id": user_id, "type": "E", "amount": float(total),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR"
     })
@@ -504,7 +518,7 @@ Aturan:
     # If no date provided, ask user
     if not tgl:
         # Save pending tx
-        pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id}
+        pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
         send(chat_id, f"📅 *Kapan tanggal transaksinya?*\nTulis: `28 juli` atau `kemarin` atau `hari ini`", parse_mode="MarkdownV2")
         return
     
@@ -530,7 +544,8 @@ Aturan:
 
     supabase_post("maskai_transactions", {
         "user_id": user_id, "type": tx_type, "amount": amount, "category_id": cat_id,
-        "description": desc, "transaction_dt": tgl, "currency": "IDR"
+        "description": desc, "transaction_dt": tgl, "currency": "IDR",
+        "metadata": json.dumps({"telegram_update_id": update_id}) if update_id else None
     })
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
@@ -576,7 +591,8 @@ def handle_pending_date(chat_id, text):
     
     supabase_post("maskai_transactions", {
         "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
-        "description": p["desc"], "transaction_dt": tgl, "currency": "IDR"
+        "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
+        "metadata": json.dumps({"telegram_update_id": p.get("update_id")}) if p.get("update_id") else None
     })
     
     label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
@@ -606,7 +622,7 @@ def cmd_usage(chat_id):
 
 # ── Command Router ──
 
-def process(msg):
+def process(msg, update_id=None):
     chat_id = msg.get("chat", {}).get("id")
     user_id = msg.get("from", {}).get("id", 0)
     text = (msg.get("text", "") or msg.get("caption", "")).strip()
@@ -794,7 +810,7 @@ def main():
                     msg = upd.get("message") or upd.get("edited_message")
                     cb = upd.get("callback_query")
                     if msg:
-                        result = process(msg)
+                        result = process(msg, upd["update_id"])
                         if result == "__STOP__":
                             log.info("Stop signal received, exiting...")
                             offset = upd["update_id"] + 1
