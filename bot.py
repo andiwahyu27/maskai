@@ -309,8 +309,8 @@ def cmd_menu(chat_id):
     ], "resize_keyboard": True}
     send(chat_id, "🤖 *MASKAI Menu*\nPilih dari keyboard atau ketik perintah:", parse_mode="Markdown", reply_markup=keyboard)
 
-def cmd_ocr(chat_id, file_id):
-    """OCR using GPT-5.6-Luna (vision-capable)"""
+def cmd_ocr(chat_id, user_id, file_id):
+    """OCR using GPT-5.5 Vision"""
     info = tg("getFile", {"file_id": file_id})
     if not info.get("ok"):
         send(chat_id, "Gagal download foto")
@@ -354,9 +354,14 @@ def cmd_ocr(chat_id, file_id):
         send(chat_id, "❌ Struk tidak jelas. Coba foto ulang.")
         return
 
+    fallback_cat = get_fallback_category(user_id, "E")
+    if not fallback_cat:
+        send(chat_id, "❌ Gagal menyimpan — kategori default tidak ditemukan.")
+        return
+
     supabase_post("maskai_transactions", {
-        "user_id": 1367356347, "type": "E", "amount": data.get("total", 0),
-        "category_id": 8, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
+        "user_id": user_id, "type": "E", "amount": data.get("total", 0),
+        "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.utcnow().strftime("%Y-%m-%d")), "currency": "IDR"
     })
     send(chat_id, f"🛒 *{data.get('toko','Struk')}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {data.get('items','-')}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
@@ -414,7 +419,10 @@ Aturan:
             pass
 
     cats = supabase_get("maskai_categories", {"name": f"ilike.{cat_name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
-    cat_id = cats[0]["id"] if cats else (9 if tx_type == "I" else 8)
+    cat_id = cats[0]["id"] if cats else get_fallback_category(user_id, tx_type)
+    if not cat_id:
+        send(chat_id, "❌ Kategori tidak ditemukan.")
+        return
 
     supabase_post("maskai_transactions", {
         "user_id": user_id, "type": tx_type, "amount": amount, "category_id": cat_id,
@@ -423,6 +431,16 @@ Aturan:
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
     send(chat_id, f"✅ *{label}*\nRp {amount:,.0f}\n{desc}\nKategori: {cat_name}\n📅 {tgl}", parse_mode="Markdown")
+
+def get_fallback_category(user_id, tx_type):
+    """Lookup fallback category by name and type, avoid hardcoded IDs"""
+    name = "Lainnya (Pemasukan)" if tx_type == "I" else "Lainnya (Pengeluaran)"
+    # Try user's category first, then global
+    for uid in (user_id, 0):
+        cats = supabase_get("maskai_categories", {"user_id": f"eq.{uid}", "name": f"ilike.{name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+        if cats:
+            return cats[0]["id"]
+    return None
 
 def handle_pending_date(chat_id, text):
     """Process user's date reply for pending transaction"""
@@ -445,7 +463,10 @@ def handle_pending_date(chat_id, text):
             tgl = datetime.now().strftime("%Y-%m-%d")  # fallback
     
     cats = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
-    cat_id = cats[0]["id"] if cats else (9 if p["type"] == "I" else 8)
+    cat_id = cats[0]["id"] if cats else get_fallback_category(p["user_id"], p["type"])
+    if not cat_id:
+        send(chat_id, "❌ Kategori tidak ditemukan.")
+        return
     
     supabase_post("maskai_transactions", {
         "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
@@ -493,7 +514,7 @@ def process(msg):
         return
 
     if photo:
-        cmd_ocr(chat_id, photo[-1]["file_id"])
+        cmd_ocr(chat_id, user_id, photo[-1]["file_id"])
         return
 
     if not text: return
