@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """MASKAI Bot v2 - Stable Telegram Finance Tracker"""
-import os, sys, json, logging, time, re, requests
+import os, sys, json, logging, time, re, requests, html
 from datetime import datetime, timedelta
 
 # ── Config ──
@@ -33,33 +33,53 @@ def log_security(action, user_id, detail=""):
     log.warning(f"SECURITY | {action} | user={user_id} | {detail}")
 
 def parse_positive_amount(value):
-    """Validate using Decimal. Returns (amount, None) or (None, error)"""
-    from decimal import Decimal, InvalidOperation
+    """Validate using Decimal. Returns (Decimal, None) or (None, error)"""
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+    if value is None:
+        return None, "Jumlah wajib diisi"
     try:
-        amt = Decimal(str(value))
-    except (InvalidOperation, ValueError):
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError, TypeError):
         return None, "Jumlah tidak valid"
-    if amt <= 0:
+    if not amount.is_finite():
+        return None, "Jumlah tidak valid"
+    if amount <= 0:
         return None, "Jumlah harus lebih dari 0"
-    if amt > 999999999:
+    if amount > Decimal("999999999"):
         return None, "Jumlah terlalu besar"
-    return float(amt), None
+    amount = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return amount, None
 
-def escape_html(text):
+def escape_html(value):
     """Escape HTML special characters"""
-    chars = "_*[]()~`>#+-=|{}.!\\"
-    for c in chars:
-        text = text.replace(c, f"\\{c}")
-    return text
+    if value is None:
+        return ""
+    return html.escape(str(value), quote=True)
 
 # ── API Helpers ──
+from dataclasses import dataclass
+from typing import Any, Optional
+
+@dataclass
 class ApiResult:
-    """Typed API result"""
-    def __init__(self, ok, data=None, status=None, error=None):
-        self.ok = ok
-        self.data = data
-        self.status = status
-        self.error = error
+    """Typed API result — all HTTP helpers return this"""
+    ok: bool
+    status: int = 0
+    data: Any = None
+    error: Optional[str] = None
+    
+    def __bool__(self):
+        return self.ok
+    
+    def __iter__(self):
+        if isinstance(self.data, list):
+            return iter(self.data)
+        return iter([])
+    
+    def __getitem__(self, idx):
+        if isinstance(self.data, (list, dict)):
+            return self.data[idx]
+        raise IndexError("No data")
 
 def api_get(url, **kw):
     """Safe GET with typed result"""
@@ -273,31 +293,31 @@ def update_owned_category(cat_id, user_id, payload):
 # ── Commands ──
 
 def cmd_start(chat_id):
-    msg = """🤖 *MASKAI Bot v2*
+    msg = """🤖 <b>MASKAI Bot v2</b>
 
-💰 *Input Natural* — ketik bebas:
-• `beli telur 20rb di toko` → pengeluaran
-• `gaji 5 juta` → pemasukan
-• `jajan bakso 15rb` → pengeluaran
-• `pemasukan 1jt dari honor`
+💰 <b>Input Natural</b> — ketik bebas:
+• <code>beli telur 20rb di toko</code> → pengeluaran
+• <code>gaji 5 juta</code> → pemasukan
+• <code>jajan bakso 15rb</code> → pengeluaran
+• <code>pemasukan 1jt dari honor</code>
 
-📊 *Laporan*:
-• `/laporan` — 5 transaksi terakhir
-• `/laporan hari ini`
-• `/laporan minggu ini`
-• `/laporan bulan ini`
-• `/laporan 2026-07-20 2026-07-28`
+📊 <b>Laporan</b>:
+• <code>/laporan</code> — 5 transaksi terakhir
+• <code>/laporan hari ini</code>
+• <code>/laporan minggu ini</code>
+• <code>/laporan bulan ini</code>
+• <code>/laporan 2026-07-20 2026-07-28</code>
 
-📋 *Kategori*:
-• `/kategori` — lihat semua
-• `/editkat <id> <nama baru>` — edit
-• `/hapuskat <id>` — hapus
-• `/tambahkat <I/E> <nama> [icon]` — tambah
+📋 <b>Kategori</b>:
+• <code>/kategori</code> — lihat semua
+• <code>/editkat <id> <nama baru></code> — edit
+• <code>/hapuskat <id></code> — hapus
+• <code>/tambahkat <I/E> <nama> [icon]</code> — tambah
 
-💰 `/saldo` — cek saldo
-📝 `/hutang <nama> <jumlah>` `/piutang <nama> <jumlah>`
-🛒 `/keranjang <jumlah> <desk>`
-📌 `/status` — cek bot"""
+💰 <code>/saldo</code> — cek saldo
+📝 <code>/hutang <nama> <jumlah></code> <code>/piutang <nama> <jumlah></code>
+🛒 <code>/keranjang <jumlah> <desk></code>
+📌 <code>/status</code> — cek bot"""
     send(chat_id, msg, parse_mode="HTML")
 
 def cmd_laporan(chat_id, user_id, text):
@@ -348,7 +368,7 @@ def cmd_laporan(chat_id, user_id, text):
         })
 
     if not txs:
-        send(chat_id, f"📊 *Laporan {periode}*\n\nBelum ada transaksi.", parse_mode="HTML")
+        send(chat_id, f"📊 <b>Laporan {periode}</b>\n\nBelum ada transaksi.", parse_mode="HTML")
         return
 
     cats = {c["id"]: c["name"] for c in supabase_get("maskai_categories", {"select": "id,name"})}
@@ -357,13 +377,13 @@ def cmd_laporan(chat_id, user_id, text):
     expense = sum(t["amount"] for t in txs if t["type"] == "E")
     selisih = income - expense
 
-    msg = f"📊 *Laporan {periode}*\n\n"
-    msg += "💰 *Ringkasan:*\n"
+    msg = f"📊 <b>Laporan {periode}</b>\n\n"
+    msg += "💰 <b>Ringkasan:</b>\n"
     msg += f"📥 Pemasukan: Rp {income:,.0f}\n"
     msg += f"📤 Pengeluaran: Rp {expense:,.0f}\n"
     msg += f"📊 Selisih: Rp {selisih:,.0f}\n"
     msg += f"🛒 {len(txs)} transaksi\n\n"
-    msg += "📋 *Transaksi Terbaru:*\n"
+    msg += "📋 <b>Transaksi Terbaru:</b>\n"
 
     for t in txs[:5]:
         dt = datetime.strptime(t["transaction_dt"][:10], "%Y-%m-%d")
@@ -376,7 +396,7 @@ def cmd_laporan(chat_id, user_id, text):
 def cmd_saldo(chat_id, user_id):
     bal = supabase_get("maskai_balance", {"user_id": f"eq.{user_id}", "select": "balance"})
     amount = bal[0]["balance"] if bal else 0
-    send(chat_id, f"💰 *Saldo*\nRp {amount:,.0f}", parse_mode="HTML")
+    send(chat_id, f"💰 <b>Saldo</b>\nRp {amount:,.0f}", parse_mode="HTML")
 
 def cmd_debt(chat_id, user_id, text):
     parts = text.strip().split()
@@ -406,7 +426,7 @@ def cmd_keranjang(chat_id, user_id, text):
     result = supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
         "description": " ".join(args[1:]) or "-"})
     if result:
-        send(chat_id, f"🛒 *Keranjang*\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="HTML")
+        send(chat_id, f"🛒 <b>Keranjang</b>\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan ke keranjang.")
 
@@ -416,7 +436,7 @@ def cmd_kategori(chat_id, user_id):
     if not cats:
         send(chat_id, "Belum ada kategori.")
         return
-    msg = "📋 *Kategori*\n"
+    msg = "📋 <b>Kategori</b>\n"
     for c in cats:
         icon = c.get("icon", "📦")
         tipe = "💰" if c["type"] == "I" else "💳"
@@ -485,7 +505,7 @@ def cmd_menu(chat_id):
         ["/kategori", "/keranjang"],
         ["/status", "/help"]
     ], "resize_keyboard": True}
-    send(chat_id, "🤖 *MASKAI Menu*\nPilih dari keyboard atau ketik perintah:", parse_mode="HTML", reply_markup=keyboard)
+    send(chat_id, "🤖 <b>MASKAI Menu</b>\nPilih dari keyboard atau ketik perintah:", parse_mode="HTML", reply_markup=keyboard)
 
 def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     """OCR using GPT-5.5 Vision"""
@@ -522,7 +542,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         return
 
     try:
-        data = json.loads(re.sub(r"```json|```", "", content).strip())
+        data = json.loads(re.sub(r"``<code>json|</code>``", "", content).strip())
     except (json.JSONDecodeError, ValueError):
         log.error(f"OCR parse: {content[:200]}")
         send(chat_id, "❌ Struk tidak dapat dibaca.")
@@ -552,7 +572,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         return
 
     result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": "E", "amount": float(total),
+        "user_id": user_id, "type": "E", "amount": str(total),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
@@ -578,11 +598,11 @@ Aturan:
 
     result = claude([{"role": "user", "content": prompt}], 200)
     if not result:
-        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• `beli telur 20rb`\n• `gaji 5 juta 28 juli`")
+        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• <code>beli telur 20rb</code>\n• <code>gaji 5 juta 28 juli</code>")
         return
 
     try:
-        data = json.loads(re.sub(r"```json|```", "", result).strip())
+        data = json.loads(re.sub(r"``<code>json|</code>``", "", result).strip())
     except (json.JSONDecodeError, ValueError):
         send(chat_id, "❌ Gagal parse. Coba lagi.")
         return
@@ -603,7 +623,7 @@ Aturan:
     if not tgl:
         # Save pending tx
         pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
-        send(chat_id, f"📅 *Kapan tanggal transaksinya?*\nTulis: `28 juli` atau `kemarin` atau `hari ini`", parse_mode="HTML")
+        send(chat_id, f"📅 <b>Kapan tanggal transaksinya?</b>\nTulis: <code>28 juli</code> atau <code>kemarin</code> atau <code>hari ini</code>", parse_mode="HTML")
         return
     
     # Convert relative dates
@@ -699,7 +719,7 @@ def cmd_usage(chat_id):
         "maskai_balance": "Saldo"
     }
     total_rows = 0
-    msg = "📊 *Supabase Usage*\n\n"
+    msg = "📊 <b>Supabase Usage</b>\n\n"
     for t, label in tables.items():
         r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
             headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
@@ -707,7 +727,7 @@ def cmd_usage(chat_id):
         total_rows += int(ct) if ct.isdigit() else 0
         msg += f"  {label}: {ct}\n"
     est_size_mb = (total_rows * 0.5) / 1024
-    msg += f"\n📦 *Estimasi:*\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
+    msg += f"\n📦 <b>Estimasi:</b>\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
     send(chat_id, msg, parse_mode="HTML")
 
 # ── Command Router ──
@@ -767,7 +787,7 @@ def process(msg, update_id=None):
         for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
             r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
             db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-        send(chat_id, f"📌 *MASKAI Bot v2*\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 *Database:*\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="HTML")
+        send(chat_id, f"📌 <b>MASKAI Bot v2</b>\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 <b>Database:</b>\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="HTML")
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
