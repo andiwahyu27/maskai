@@ -25,6 +25,25 @@ def is_authorized(user_id):
 def log_security(action, user_id, detail=""):
     log.warning(f"SECURITY | {action} | user={user_id} | {detail}")
 
+def parse_positive_amount(value):
+    """Validate and parse amount. Returns (amount, None) or (None, error_msg)"""
+    try:
+        amt = float(value)
+    except (ValueError, TypeError):
+        return None, "Jumlah tidak valid"
+    if amt <= 0:
+        return None, "Jumlah harus lebih dari 0"
+    if amt > 999999999.99:
+        return None, "Jumlah terlalu besar"
+    return amt, None
+
+def escape_md(text):
+    """Escape special characters for Telegram MarkdownV2"""
+    chars = "_*[]()~`>#+-=|{}.!\\"
+    for c in chars:
+        text = text.replace(c, f"\\{c}")
+    return text
+
 # ── API Helpers ──
 class ApiResult:
     """Typed API result"""
@@ -371,7 +390,7 @@ def cmd_ocr(chat_id, user_id, file_id):
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.utcnow().strftime("%Y-%m-%d")), "currency": "IDR"
     })
-    send(chat_id, f"🛒 *{data.get('toko','Struk')}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {data.get('items','-')}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
+    send(chat_id, f"🛒 *{escape_md(data.get('toko','Struk'))}*\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_md(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="Markdown")
 
 def cmd_natural(chat_id, user_id, text):
     """Parse natural language input"""
@@ -400,6 +419,12 @@ Aturan:
 
     tx_type = "I" if data.get("jenis") == "pemasukan" else "E"
     amount = data.get("jumlah", 0)
+    
+    # Validate amount
+    amt, err = parse_positive_amount(amount)
+    if err:
+        send(chat_id, f"❌ {err}")
+        return
     cat_name = data.get("kategori", "Lainnya")
     desc = data.get("deskripsi", "-")
     tgl = data.get("tanggal")
@@ -437,7 +462,9 @@ Aturan:
     })
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"
-    send(chat_id, f"✅ *{label}*\nRp {amount:,.0f}\n{desc}\nKategori: {cat_name}\n📅 {tgl}", parse_mode="Markdown")
+    esc_desc = escape_md(desc)
+    esc_cat = escape_md(cat_name)
+    send(chat_id, f"✅ *{label}*\nRp {amt:,.0f}\n{esc_desc}\nKategori: {esc_cat}\n📅 {tgl}", parse_mode="Markdown")
 
 def get_fallback_category(user_id, tx_type):
     """Lookup fallback category by name and type, avoid hardcoded IDs"""
@@ -481,7 +508,7 @@ def handle_pending_date(chat_id, text):
     })
     
     label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
-    send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{p['desc']}\nKategori: {p['cat']}\n📅 {tgl}", parse_mode="Markdown")
+    send(chat_id, f"✅ *{label}*\nRp {p['amount']:,.0f}\n{escape_md(p['desc'])}\nKategori: {escape_md(p['cat'])}\n📅 {tgl}", parse_mode="Markdown")
 
 def cmd_usage(chat_id):
     """Show Supabase usage stats"""
