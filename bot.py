@@ -811,8 +811,14 @@ def process(msg, update_id=None):
         # Count DB rows
         db = {}
         for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
-            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
-            db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+            try:
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+                if r.status_code < 200 or r.status_code >= 300:
+                    db[t] = f"err({r.status_code})"
+                else:
+                    db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+            except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
+                db[t] = type(e).__name__[:6]
         send(chat_id, f"📌 <b>MASKAI Bot v2</b>\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 <b>Database:</b>\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="HTML")
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
