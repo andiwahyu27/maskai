@@ -19,9 +19,14 @@ def supabase_post(table, data):
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     return api_post(url, json=data, headers=SUPABASE_HEADERS)
 
-def supabase_delete(table, field, value):
-    """Supabase DELETE. Returns ApiResult — check .ok"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}?{field}=eq.{value}"
+def supabase_delete(table, field_or_filters, value=None):
+    """Supabase DELETE. Accepts (table, field, value) or (table, [(k,v),...])"""
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    if isinstance(field_or_filters, list):
+        q = "&".join(f"{k}=eq.{v}" for k, v in field_or_filters)
+        url += f"?{q}"
+    else:
+        url += f"?{field_or_filters}=eq.{value}"
     return api_delete(url, headers=SUPABASE_HEADERS)
 
 def supabase_patch(table, filters, data):

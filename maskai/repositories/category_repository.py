@@ -37,9 +37,8 @@ def delete_owned_category(cat_id, user_id):
         return False, "Kategori tidak ditemukan"
     if cat.get("user_id") == 0:
         return False, "Kategori global tidak bisa dihapus"
-    # Delete with dual filter — extra safety
-    r = api_delete(f"{SUPABASE_URL}/rest/v1/maskai_categories?id=eq.{cat_id}&user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
-    if not r.ok:
+    result = supabase_delete("maskai_categories", [("id", cat_id), ("user_id", user_id)])
+    if not result.ok:
         return False, "Gagal menghapus"
     return True, None
 
