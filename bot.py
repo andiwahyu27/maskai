@@ -530,7 +530,12 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, "❌ Gagal membaca struk.")
         return
 
-    content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    try:
+        content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    except (ValueError, KeyError, IndexError, TypeError):
+        log.error(f"OCR invalid response: {r.text[:200]}")
+        send(chat_id, "❌ Format hasil OCR tidak valid.")
+        return
 
     if not content:
         send(chat_id, "❌ Struk tidak dapat dibaca.")
