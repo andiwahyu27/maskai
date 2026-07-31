@@ -1,19 +1,22 @@
--- MASKAI Telegram Idempotency Migration
--- Fixes CR-009: prevent duplicate transactions from retried updates
--- Safe to run multiple times
+-- MASKAI Telegram Idempotency Migration v2
+-- CR-009: Composite unique index on (user_id, telegram_update_id)
+-- Safe to run multiple times (IF NOT EXISTS)
 
 BEGIN;
 
--- Add telegram_update_id to metadata or as nullable column
--- Using metadata JSONB is simpler and avoids schema breaking changes
--- If the column doesn't exist, we use metadata field in insert
+-- 1. Drop old single-column index if it exists
+DROP INDEX IF EXISTS idx_transactions_update_id;
 
--- 1. Add unique partial index on metadata->telegram_update_id
--- This prevents insert of duplicate update_id
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_update_id 
-ON maskai_transactions ((metadata->>'telegram_update_id'))
+-- 2. Create composite partial unique index
+CREATE UNIQUE INDEX IF NOT EXISTS uq_maskai_transactions_user_update
+ON maskai_transactions (user_id, (metadata->>'telegram_update_id'))
 WHERE (metadata->>'telegram_update_id') IS NOT NULL;
 
 COMMIT;
 
--- Rollback: DROP INDEX IF EXISTS idx_transactions_update_id;
+-- Audit duplicate (run manually after):
+-- SELECT user_id, metadata->>'telegram_update_id' as uid, COUNT(*)
+-- FROM maskai_transactions
+-- WHERE metadata->>'telegram_update_id' IS NOT NULL
+-- GROUP BY user_id, metadata->>'telegram_update_id'
+-- HAVING COUNT(*) > 1;
