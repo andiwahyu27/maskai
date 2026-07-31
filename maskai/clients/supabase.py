@@ -1,6 +1,7 @@
-"""Supabase REST client"""
+"""MASKAI — Supabase REST client"""
 import logging
 from maskai.clients.http import api_get, api_post, api_patch, api_delete
+from maskai.config import SUPABASE_URL, SUPABASE_HEADERS
 log = logging.getLogger("maskai.supabase")
 def supabase_get(table, params=None):
     """Supabase GET. Returns ApiResult — check .ok, use .data"""

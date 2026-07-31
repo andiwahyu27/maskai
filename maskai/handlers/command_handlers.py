@@ -392,7 +392,7 @@ def handle_pending_date(chat_id, text):
     send(chat_id, f"✅ <b>{label}</b>\nRp {p['amount']:,.0f}\n{escape_html(p['desc'])}\nKategori: {escape_html(p['cat'])}\n📅 {tgl}", parse_mode="HTML")
 
 def cmd_usage(chat_id):
-    """Show Supabase usage stats"""
+    """Show Supabase usage stats — uses supabase_get"""
     send(chat_id, "⏳ Cek usage Supabase...")
     tables = {
         "maskai_transactions": "Transaksi",
@@ -404,17 +404,13 @@ def cmd_usage(chat_id):
     total_rows = 0
     msg = "📊 <b>Supabase Usage</b>\n\n"
     for t, label in tables.items():
-        try:
-            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
-                headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=config.HTTP_TIMEOUT_SHORT)
-            if r.status_code < 200 or r.status_code >= 300:
-                msg += f"  {label}: error ({r.status_code})\n"
-                continue
-            ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-            total_rows += int(ct) if ct.isdigit() else 0
+        result = supabase_get(t, {"select": "count"})
+        if result.ok:
+            ct = len(result.data) if isinstance(result.data, list) else "?"
+            total_rows += ct if isinstance(ct, int) else 0
             msg += f"  {label}: {ct}\n"
-        except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
-            msg += f"  {label}: gagal ({type(e).__name__})\n"
+        else:
+            msg += f"  {label}: error ({result.status})\n"
     est_size_mb = (total_rows * 0.5) / 1024
     msg += f"\n📦 <b>Estimasi:</b>\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
     send(chat_id, msg, parse_mode="HTML")
@@ -422,19 +418,15 @@ def cmd_usage(chat_id):
 # ── Command Router ──
 
 def cmd_status(chat_id, user_id):
-    """Bot status — inline"""
-    import requests, time as tm
-    from maskai.config import config, SUPABASE_URL, SUPABASE_HEADERS
-    from maskai.clients.telegram import send
+    """Bot status — uses supabase_get"""
+    import time as tm
     uptime = tm.strftime("%Hh %Mm", tm.gmtime(tm.time() - __import__('maskai.app').BOT_START_TIME))
     db = {}
-    for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
-        try:
-            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=config.HTTP_TIMEOUT_SHORT)
-            if r.status_code < 200 or r.status_code >= 300:
-                db[t] = f"err({r.status_code})"
-            else:
-                db[t] = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-        except Exception as e:
-            db[t] = type(e).__name__[:6]
-    send(chat_id, f"📌 <b>MASKAI Bot v2</b>\\n✅ Aktif\\n⏱ {uptime}\\n🧠 Teks: Claude Sonnet 4.5\\n🖼 OCR: GPT-5.5\\n\\n💾 <b>Database:</b>\\n TX: {db.get('maskai_transactions','?')} | Hutang: {db.get('maskai_debts','?')}\\n Keranjang: {db.get('maskai_keranjang','?')} | Kat: {db.get('maskai_categories','?')}", parse_mode="HTML")
+    labels = {"maskai_transactions":"TX","maskai_debts":"Hutang","maskai_keranjang":"Keranjang","maskai_categories":"Kat"}
+    for t, lbl in labels.items():
+        result = supabase_get(t, {"select": "count"})
+        if result.ok:
+            db[lbl] = len(result.data) if isinstance(result.data, list) else "?"
+        else:
+            db[lbl] = f"err({result.status})"
+    send(chat_id, f"📌 <b>MASKAI Bot v2</b>\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 <b>Database:</b>\n TX: {db.get('TX','?')} | Hutang: {db.get('Hutang','?')}\n Keranjang: {db.get('Keranjang','?')} | Kat: {db.get('Kat','?')}", parse_mode="HTML")
