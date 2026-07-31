@@ -10,7 +10,7 @@ from maskai.utils.html import escape_html
 from maskai.utils.offset_store import OffsetStore
 from maskai.clients.telegram import send
 from maskai.clients.supabase import supabase_get, supabase_post, supabase_patch, supabase_delete
-from maskai.repositories.category_repository import get_accessible_category
+from maskai.repositories.category_repository import get_accessible_category, delete_owned_category
 from maskai.state.pending_store import pending
 
 # ── Imports from handler/service modules ──

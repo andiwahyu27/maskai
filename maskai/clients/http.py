@@ -3,6 +3,7 @@ import logging, requests
 from dataclasses import dataclass
 from typing import Any, Optional
 from maskai.config import config
+BOT_TOKEN = config.BOT_TOKEN
 log = logging.getLogger("maskai.http")
 @dataclass
 class ApiResult:
@@ -72,21 +73,6 @@ def api_patch(url, json=None, **kw):
         return ApiResult(False, error="connection")
     except ValueError:
         return ApiResult(False, error="invalid_json")
-    except requests.RequestException as exc:
-        return ApiResult(False, error=str(exc)[:200])
-
-def api_delete(url, **kw):
-    """Safe DELETE with typed result"""
-    try:
-        r = requests.delete(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
-        if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API DELETE %s: %s", r.status_code, r.text[:100])
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, status=r.status_code)
-    except requests.Timeout:
-        return ApiResult(False, error="timeout")
-    except requests.ConnectionError:
-        return ApiResult(False, error="connection")
     except requests.RequestException as exc:
         return ApiResult(False, error=str(exc)[:200])
 
