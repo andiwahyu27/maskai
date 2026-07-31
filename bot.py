@@ -190,7 +190,7 @@ def api_patch(url, json=None, **kw):
         return ApiResult(False, error="connection")
     except ValueError:
         return ApiResult(False, error="invalid_json")
-    except requests.RequestException as e:
+    except requests.RequestException as exc:
         return ApiResult(False, error=str(exc)[:200])
 
 def api_delete(url, **kw):
@@ -205,7 +205,7 @@ def api_delete(url, **kw):
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
         return ApiResult(False, error="connection")
-    except requests.RequestException as e:
+    except requests.RequestException as exc:
         return ApiResult(False, error=str(exc)[:200])
 
 def supabase_patch(table, filters, data):
@@ -1027,9 +1027,16 @@ def main():
                     f.write(str(offset))
                 os.rename(OFFSET_FILE + ".tmp", OFFSET_FILE)
 
-        except (requests.Timeout, requests.ConnectionError, ValueError, OSError) as e:
+        except requests.RequestException as exc:
             err_count += 1
-            log.error(f"Loop error ({err_count}/5): {e}")
+            log.error("Polling request error (%s/5): %s", err_count, exc)
+            if err_count >= 5:
+                log.critical("Polling failed %s times, stopping", err_count)
+                break
+            time_module.sleep(5)
+        except (ValueError, OSError) as exc:
+            err_count += 1
+            log.error("Loop error (%s/5): %s", err_count, exc)
             if err_count >= 5: break
             time_module.sleep(5)
 
