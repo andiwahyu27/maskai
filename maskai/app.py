@@ -1,344 +1,54 @@
-#!/usr/bin/env python3
-"""MASKAI Bot v2 - Stable Telegram Finance Tracker"""
+"""MASKAI — Application composition (CR-003)"""
 import os, sys, json, logging, time as time_module, re, requests, html
 from datetime import datetime, timedelta, time
-from dataclasses import dataclass, field
-from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-# ── Centralized Config ──
-@dataclass(frozen=True)
-class Config:
-    """All configuration from environment — validated at startup"""
-    # Mandatory
-    BOT_TOKEN: str
-    SUPABASE_URL: str
-    SUPABASE_KEY: str
-    DAHONO_KEY: str
-    # Optional with safe defaults
-    DAHONO_URL: str = "https://gateway.dahono.com/v1"
-    TELEGRAM_API: str = ""
-    SUPABASE_HEADERS: dict = field(default_factory=dict)
-    HTTP_TIMEOUT: int = 15
-    HTTP_TIMEOUT_LONG: int = 30
-    HTTP_TIMEOUT_SHORT: int = 5
-    POLL_TIMEOUT: int = 35
-    TZ: ZoneInfo = ZoneInfo("Asia/Jakarta")
-    LOG_LEVEL: str = "INFO"
-    OFFSET_FILE: str = "/var/lib/maskai-bot/offset.txt"
-    GOOGLE_CREDS_FILE: str = ""
-    GOOGLE_SHEET_ID: str = ""
-    ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
+# ── Import from modular packages ──
+from maskai.config import config, from_env, SUPABASE_URL, SUPABASE_KEY, BOT_TOKEN, DAHONO_KEY
+from maskai.config import DAHONO_URL, TELEGRAM_API, SUPABASE_HEADERS, TZ, JAKARTA_TZ, ADMIN_IDS
+from maskai.utils.validation import parse_positive_amount
+from maskai.utils.html import escape_html
+from maskai.utils.dates import build_jakarta_date_range
+from maskai.clients.http import ApiResult, api_get, api_post, api_patch, api_delete
+from maskai.clients.telegram import tg, send
+from maskai.clients.dahono import claude
+from maskai.clients.supabase import supabase_get, supabase_post, supabase_patch, supabase_delete
+from maskai.repositories.category_repository import (
+    get_accessible_category, list_accessible_categories,
+    is_category_owner, delete_owned_category, update_owned_category
+)
 
-    def __post_init__(self):
-        # Validate mandatory
-        missing = []
-        if not self.BOT_TOKEN: missing.append("BOT_TOKEN")
-        if not self.SUPABASE_URL: missing.append("SUPABASE_URL")
-        if not self.SUPABASE_KEY: missing.append("SUPABASE_KEY")
-        if not self.DAHONO_KEY: missing.append("DAHONO_KEY")
-        if missing:
-            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
-
-def from_env() -> "Config":
-    tz_str = os.environ.get("TZ", "Asia/Jakarta")
-    token = os.environ.get("BOT_TOKEN", "")
-    return Config(
-        BOT_TOKEN=token,
-        SUPABASE_URL=os.environ.get("SUPABASE_URL", ""),
-        SUPABASE_KEY=os.environ.get("SUPABASE_KEY", ""),
-        DAHONO_KEY=os.environ.get("DAHONO_KEY", ""),
-        TELEGRAM_API=f"https://api.telegram.org/bot{token}",
-        SUPABASE_HEADERS={
-            "apikey": os.environ.get("SUPABASE_KEY", ""),
-            "Authorization": f"Bearer {os.environ.get('SUPABASE_KEY', '')}",
-            "Content-Type": "application/json",
-        },
-        TZ=ZoneInfo(tz_str),
-        LOG_LEVEL=os.environ.get("LOG_LEVEL", "INFO"),
-        OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt"),
-        GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE", ""),
-        GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID", ""),
-    )
-
-# Load config
-try:
-    config = from_env()
-except RuntimeError as e:
-    if __name__ == "__main__":
-        print(f"FATAL: {e}", file=sys.stderr)
-        sys.exit(1)
-    # In test/import mode, create with empty defaults
-    config = Config(BOT_TOKEN="test", SUPABASE_URL="test", SUPABASE_KEY="test", DAHONO_KEY="test")
-
-# Backward-compat aliases
-SUPABASE_URL = config.SUPABASE_URL
-SUPABASE_KEY = config.SUPABASE_KEY
-BOT_TOKEN = config.BOT_TOKEN
-DAHONO_KEY = config.DAHONO_KEY
-DAHONO_URL = config.DAHONO_URL
-TELEGRAM_API = config.TELEGRAM_API
-SUPABASE_HEADERS = config.SUPABASE_HEADERS
-TZ = config.TZ
-OFFSET_FILE = config.OFFSET_FILE
-JAKARTA_TZ = ZoneInfo("Asia/Jakarta")
-ADMIN_IDS = config.ADMIN_IDS
-
+# ── Logging ──
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL), format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("maskai")
 BOT_START_TIME = time_module.time()
 pending = {}
 
-# Ensure offset directory exists
+# Ensure offset directory
+OFFSET_FILE = config.OFFSET_FILE
 try:
     os.makedirs(os.path.dirname(OFFSET_FILE), exist_ok=True)
 except PermissionError:
     OFFSET_FILE = "/tmp/maskai_offset.txt"
 
-# ── All application logic below ──
+# ── Category helpers (thin wrappers using repository) ──
 
-def build_jakarta_date_range(start_str, end_str):
-    """Build timezone-aware half-open date range for queries"""
-    start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
-    end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
-    if start_date > end_date:
-        raise ValueError("Tanggal awal tidak boleh setelah tanggal akhir")
-    start_dt = datetime.combine(start_date, time.min, tzinfo=JAKARTA_TZ)
-    end_dt = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=JAKARTA_TZ)
-    return start_dt, end_dt
+def get_fallback_category(user_id, tx_type):
+    """Lookup fallback category by name and type"""
+    name = "Lainnya (Pemasukan)" if tx_type == "I" else "Lainnya (Pengeluaran)"
+    for uid in (user_id, 0):
+        result = supabase_get("maskai_categories", {"user_id": f"eq.{uid}", "name": f"ilike.{name}", "type": f"eq.{tx_type}", "select": "id", "limit": "1"})
+        cats = result.data if result.ok and isinstance(result.data, list) else []
+        if cats:
+            return cats[0]["id"]
+    return None
+
 
 def is_authorized(user_id):
     return user_id in ADMIN_IDS
 
 def log_security(action, user_id, detail=""):
     log.warning(f"SECURITY | {action} | user={user_id} | {detail}")
-
-def parse_positive_amount(value):
-    """Validate using Decimal. Returns (Decimal, None) or (None, error)"""
-    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-    if value is None:
-        return None, "Jumlah wajib diisi"
-    try:
-        amount = Decimal(str(value).strip())
-    except (InvalidOperation, ValueError, TypeError):
-        return None, "Jumlah tidak valid"
-    if not amount.is_finite():
-        return None, "Jumlah tidak valid"
-    if amount <= 0:
-        return None, "Jumlah harus lebih dari 0"
-    if amount > Decimal("999999999"):
-        return None, "Jumlah terlalu besar"
-    amount = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return amount, None
-
-def escape_html(value):
-    """Escape HTML special characters"""
-    if value is None:
-        return ""
-    return html.escape(str(value), quote=True)
-
-# ── API Helpers ──
-from dataclasses import dataclass
-from typing import Any, Optional
-
-@dataclass
-class ApiResult:
-    """Typed API result — all HTTP helpers return this"""
-    ok: bool
-    status: int = 0
-    data: Any = None
-    error: Optional[str] = None
-
-def api_get(url, **kw):
-    """Safe GET with typed result"""
-    try:
-        r = requests.get(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
-        if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API GET %s: %s", r.status_code, r.text[:100])
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
-    except requests.Timeout:
-        log.error("API GET timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
-        return ApiResult(False, error="timeout")
-    except requests.ConnectionError:
-        log.error("API GET connection error: %s", url.replace(BOT_TOKEN, "***")[:80])
-        return ApiResult(False, error="connection")
-    except ValueError as e:
-        log.error(f"API GET invalid JSON: {e}")
-        return ApiResult(False, error="invalid_json")
-    except requests.RequestException as exc:
-        log.error("API GET request error: %s", exc)
-        return ApiResult(False, error=str(exc)[:200])
-
-def api_post(url, json=None, data=None, **kw):
-    """Safe POST with typed result"""
-    try:
-        r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
-        if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API POST %s: %s", r.status_code, r.text[:100])
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
-    except requests.Timeout:
-        log.error("API POST timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
-        return ApiResult(False, error="timeout")
-    except requests.ConnectionError:
-        log.error("API POST connection error: %s", url.replace(BOT_TOKEN, "***")[:80])
-        return ApiResult(False, error="connection")
-    except ValueError as e:
-        log.error(f"API POST invalid JSON: {e}")
-        return ApiResult(False, error="invalid_json")
-    except requests.RequestException as exc:
-        log.error("API POST request error: %s", exc)
-        return ApiResult(False, error=str(exc)[:200])
-
-def tg(method, data=None):
-    """Telegram API call"""
-    url = f"{TELEGRAM_API}/{method}"
-    if data:
-        result = api_post(url, json=data)
-    else:
-        result = api_get(url)
-    return result.data if result.ok else {"ok": False, "error": result.error}
-
-def send(chat_id, text, parse_mode=None, reply_markup=None):
-    """Send Telegram message"""
-    d = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
-    if parse_mode: d["parse_mode"] = parse_mode
-    if reply_markup: d["reply_markup"] = reply_markup
-    return tg("sendMessage", d)
-
-def claude(messages, max_tokens=500):
-    """Claude via Dahono — safe JSON/HTTP handling"""
-    try:
-        r = requests.post(f"{DAHONO_URL}/chat/completions",
-            json={"model": "dahono/claude-sonnet-4.5-free", "messages": messages, "max_tokens": max_tokens},
-            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=config.HTTP_TIMEOUT_LONG)
-        if r.status_code != 200 or not r.text:
-            log.warning(f"Claude HTTP {r.status_code}: {r.text[:100]}")
-            return None
-        body = r.json()
-        return body["choices"][0]["message"]["content"]
-    except (ValueError, KeyError, IndexError, requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
-        log.error(f"Claude error: {e}")
-        return None
-
-def supabase_get(table, params=None):
-    """Supabase GET. Returns ApiResult — check .ok, use .data"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    if params:
-        if isinstance(params, dict):
-            q = "&".join(f"{k}={v}" for k, v in params.items())
-        else:
-            q = "&".join(f"{k}={v}" for k, v in params)
-        url += f"?{q}"
-    return api_get(url, headers=SUPABASE_HEADERS)
-
-def supabase_post(table, data):
-    """Supabase POST. Returns ApiResult — check .ok, use .data"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    return api_post(url, json=data, headers=SUPABASE_HEADERS)
-
-def supabase_delete(table, field, value):
-    """Supabase DELETE. Returns ApiResult — check .ok"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}?{field}=eq.{value}"
-    return api_delete(url, headers=SUPABASE_HEADERS)
-
-def api_patch(url, json=None, **kw):
-    """Safe PATCH with typed result"""
-    try:
-        r = requests.patch(url, json=json, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
-        if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API PATCH %s: %s", r.status_code, r.text[:100])
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
-        # 204 has no body
-        if r.status_code == 204:
-            return ApiResult(True, status=204)
-        return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
-    except requests.Timeout:
-        return ApiResult(False, error="timeout")
-    except requests.ConnectionError:
-        return ApiResult(False, error="connection")
-    except ValueError:
-        return ApiResult(False, error="invalid_json")
-    except requests.RequestException as exc:
-        return ApiResult(False, error=str(exc)[:200])
-
-def api_delete(url, **kw):
-    """Safe DELETE with typed result"""
-    try:
-        r = requests.delete(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
-        if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API DELETE %s: %s", r.status_code, r.text[:100])
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, status=r.status_code)
-    except requests.Timeout:
-        return ApiResult(False, error="timeout")
-    except requests.ConnectionError:
-        return ApiResult(False, error="connection")
-    except requests.RequestException as exc:
-        return ApiResult(False, error=str(exc)[:200])
-
-def supabase_patch(table, filters, data):
-    """Supabase PATCH. Returns ApiResult — check .ok"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    if filters:
-        q = "&".join(f"{k}=eq.{v}" for k, v in filters)
-        url += f"?{q}"
-    return api_patch(url, json=data, headers=SUPABASE_HEADERS)
-
-# ── Category Ownership Helpers ──
-def get_accessible_category(cat_id, user_id):
-    """Get category if user can access it (global or owned)"""
-    result = supabase_get("maskai_categories", {"id": f"eq.{cat_id}", "select": "id,name,icon,type,user_id"})
-    if not result.ok:
-        return None
-    cats = result.data if isinstance(result.data, list) else []
-    if not cats:
-        return None
-    cat = cats[0]
-    if cat.get("user_id") not in (0, user_id):
-        return None
-    return cat
-
-def is_category_owner(cat, user_id):
-    """Check if user owns this category (not global, not other user)"""
-    return cat and cat.get("user_id") == user_id
-
-def list_accessible_categories(user_id):
-    """List categories visible to user: own + global"""
-    # Use two queries — Supabase doesn't support OR
-    r1 = supabase_get("maskai_categories", {"user_id": f"eq.{user_id}", "select": "id,name,icon,type,user_id"})
-    r2 = supabase_get("maskai_categories", {"user_id": "eq.0", "select": "id,name,icon,type,user_id"})
-    own = r1.data if r1.ok and isinstance(r1.data, list) else []
-    global_cats = r2.data if r2.ok and isinstance(r2.data, list) else []
-    return own + global_cats
-
-def delete_owned_category(cat_id, user_id):
-    """Delete category if user owns it. Uses id+user_id filter"""
-    cat = get_accessible_category(cat_id, user_id)
-    if not cat:
-        return False, "Kategori tidak ditemukan"
-    if cat.get("user_id") == 0:
-        return False, "Kategori global tidak bisa dihapus"
-    # Delete with dual filter — extra safety
-    r = api_delete(f"{SUPABASE_URL}/rest/v1/maskai_categories?id=eq.{cat_id}&user_id=eq.{user_id}", headers=SUPABASE_HEADERS)
-    if not r.ok:
-        return False, "Gagal menghapus"
-    return True, None
-
-def update_owned_category(cat_id, user_id, payload):
-    """Update category if user owns it. Uses id+user_id filter"""
-    cat = get_accessible_category(cat_id, user_id)
-    if not cat:
-        return False, "Kategori tidak ditemukan"
-    if cat.get("user_id") == 0:
-        return False, "Kategori global tidak bisa diedit"
-    result = supabase_patch("maskai_categories", [("id", cat_id), ("user_id", user_id)], payload)
-    if not result.ok:
-        return False, "Gagal update"
-    return True, None
-
-# ── Commands ──
 
 def cmd_start(chat_id):
     msg = """🤖 <b>MASKAI Bot v2</b>
