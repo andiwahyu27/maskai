@@ -86,9 +86,9 @@ def api_get(url, **kw):
         if r.status_code < 200 or r.status_code >= 300:
             log.warning(f"API GET {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
-        return ApiResult(True, data=r.json() if r.text else None, status=200)
+        return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
     except requests.Timeout:
-        log.error(f"API GET timeout: {url[:80]}")
+        log.error("API GET timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
         log.error(f"API GET connection: {url[:80]}")
@@ -104,12 +104,12 @@ def api_post(url, json=None, data=None, **kw):
     """Safe POST with typed result"""
     try:
         r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", 15), **kw)
-        if r.status_code not in (200, 201):
+        if r.status_code < 200 or r.status_code >= 300:
             log.warning(f"API POST {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
     except requests.Timeout:
-        log.error(f"API POST timeout: {url[:80]}")
+        log.error("API POST timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
         log.error(f"API POST connection: {url[:80]}")
@@ -540,6 +540,10 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     except requests.ConnectionError:
         log.error("OCR connection error")
         send(chat_id, "❌ Gagal terhubung ke OCR.")
+        return
+    except requests.RequestException as exc:
+        log.error("OCR request failed: %s", exc)
+        send(chat_id, "❌ Layanan OCR sedang bermasalah.")
         return
 
     try:
