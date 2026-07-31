@@ -965,7 +965,7 @@ def main():
                             keyboard["inline_keyboard"].append(
                                 [{"text": "🔙 Kembali", "callback_data": "menu_kategori"}]
                             )
-                            send(chat_id, f"📋 *{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}*\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="HTML", reply_markup=keyboard)
+                            send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="HTML", reply_markup=keyboard)
                         elif data_cb.startswith("katdelok_"):
                             cat_id = data_cb.split("_")[1]
                             ok, err = delete_owned_category(cat_id, cb_user_id)
