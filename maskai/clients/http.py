@@ -2,6 +2,7 @@
 import logging, requests
 from dataclasses import dataclass
 from typing import Any, Optional
+from maskai.config import config
 log = logging.getLogger("maskai.http")
 @dataclass
 class ApiResult:
