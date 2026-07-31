@@ -327,13 +327,21 @@ Aturan:
         send(chat_id, "❌ Kategori tidak ditemukan.")
         return
 
-    result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": tx_type, "amount": format(amt, "f"), "category_id": cat_id,
-        "description": desc, "transaction_dt": tgl, "currency": "IDR",
-        "metadata": {"telegram_update_id": str(update_id), "source": "natural"} if update_id else None
-    })
-    if not result.ok:
+    from maskai.repositories.transaction_repository import create_transaction, CreateTransactionStatus
+    result = create_transaction(
+        user_id=user_id,
+        update_id=update_id,
+        payload={
+            "user_id": user_id, "type": tx_type, "amount": format(amt, "f"), "category_id": cat_id,
+            "description": desc, "transaction_dt": tgl, "currency": "IDR",
+        },
+        source="natural",
+    )
+    if result.status == CreateTransactionStatus.FAILED:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
+        return
+    if result.status == CreateTransactionStatus.ALREADY_EXISTS:
+        send(chat_id, "✅ Transaksi ini sudah pernah diproses sebelumnya.")
         return
 
     label = "Pemasukan" if tx_type == "I" else "Pengeluaran"

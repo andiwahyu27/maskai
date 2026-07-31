@@ -98,13 +98,18 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, "❌ Gagal menyimpan — kategori default tidak ditemukan.")
         return
 
-    result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": "E", "amount": format(total, "f"),
-        "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
-        "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
-        "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
-    })
-    if result.ok:
+    from maskai.repositories.transaction_repository import create_transaction, CreateTransactionStatus
+    result = create_transaction(
+        user_id=user_id,
+        update_id=update_id,
+        payload={
+            "user_id": user_id, "type": "E", "amount": format(total, "f"),
+            "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
+            "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
+        },
+        source="ocr",
+    )
+    if result.status in (CreateTransactionStatus.CREATED, CreateTransactionStatus.ALREADY_EXISTS):
         send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan transaksi.")

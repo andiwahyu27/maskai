@@ -189,13 +189,21 @@ def _handle_pending(chat_id, user_id, text, p):
     if not cat_id:
         send(chat_id, "❌ Kategori tidak ditemukan.")
         return
-    result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": p["type"], "amount": f"{amount:.2f}",
-        "category_id": cat_id, "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
-        "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
-    })
-    if not result.ok:
+    from maskai.repositories.transaction_repository import create_transaction, CreateTransactionStatus
+    result = create_transaction(
+        user_id=user_id,
+        update_id=p.get("update_id"),
+        payload={
+            "user_id": user_id, "type": p["type"], "amount": f"{amount:.2f}",
+            "category_id": cat_id, "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
+        },
+        source="natural",
+    )
+    if result.status == CreateTransactionStatus.FAILED:
         send(chat_id, "❌ Gagal menyimpan.")
+        return
+    if result.status == CreateTransactionStatus.ALREADY_EXISTS:
+        send(chat_id, "✅ Transaksi ini sudah pernah diproses sebelumnya.")
         return
     send(chat_id, f"✅ Tersimpan!\n{p['desc']}\n💰 Rp {amount:,.0f}\n📅 {tgl}", parse_mode="HTML")
 
