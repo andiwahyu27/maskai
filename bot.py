@@ -57,8 +57,8 @@ def from_env() -> "Config":
         TZ=ZoneInfo(tz_str),
         LOG_LEVEL=os.environ.get("LOG_LEVEL", "INFO"),
         OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt"),
-        GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE", "/home/ubuntu/maskai/service-account.json"),
-        GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID", "1dBkYHEGsftjqH2NA9bd5EJ58Cc_HYKt8rVoWk0RdQUg"),
+        GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE", ""),
+        GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID", ""),
     )
 
 # Load config
