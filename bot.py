@@ -529,6 +529,12 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
 
+    # Validate OCR response is a dict
+    if not isinstance(data, dict):
+        log.error(f"OCR response not dict: {type(data).__name__}")
+        send(chat_id, "❌ Format hasil OCR tidak valid.")
+        return
+
     if data.get("error"):
         send(chat_id, "❌ Struk tidak jelas. Coba foto ulang.")
         return
@@ -551,7 +557,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
     })
     if result.ok:
-        send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {data.get('total',0):,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {data.get('tanggal','-')}\n\n✅ Auto disimpan!", parse_mode="HTML")
+        send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
 
