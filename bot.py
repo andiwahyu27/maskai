@@ -363,7 +363,7 @@ def cmd_laporan(chat_id, user_id, text):
     expense = sum(t["amount"] for t in txs if t["type"] == "E")
     selisih = income - expense
 
-    msg = f"📊 <b>Laporan {periode}</b>\n\n"
+    msg = f"📊 <b>Laporan {escape_html(periode)}</b>\n\n"
     msg += "💰 <b>Ringkasan:</b>\n"
     msg += f"📥 Pemasukan: Rp {income:,.0f}\n"
     msg += f"📤 Pengeluaran: Rp {expense:,.0f}\n"
@@ -375,7 +375,7 @@ def cmd_laporan(chat_id, user_id, text):
         dt = datetime.strptime(t["transaction_dt"][:10], "%Y-%m-%d")
         cat = cats.get(t.get("category_id"), "Lainnya")
         label = "Pemasukan" if t["type"] == "I" else "Pengeluaran"
-        msg += f"\n📅 {dt.strftime('%d %b %Y')}\n📝 {cat} ({label})\n💵 Rp {t['amount']:,.0f}\n"
+        msg += f"\n📅 {dt.strftime('%d %b %Y')}\n📝 {escape_html(cat)} ({escape_html(label)})\n💵 Rp {t['amount']:,.0f}\n"
 
     send(chat_id, msg, parse_mode="HTML")
 
@@ -406,7 +406,7 @@ def cmd_debt(chat_id, user_id, text):
         send(chat_id, "❌ Gagal menyimpan.")
         return
     label = "Hutang" if is_hutang else "Piutang"
-    send(chat_id, f"📝 <b>{label}</b>\nRp {amount:,.0f}\n👤 {args[0]}", parse_mode="HTML")
+    send(chat_id, f"📝 <b>{escape_html(label)}</b>\nRp {amount:,.0f}\n👤 {escape_html(args[0])}", parse_mode="HTML")
 
 def cmd_keranjang(chat_id, user_id, text):
     rest = text[11:].strip()
@@ -436,7 +436,7 @@ def cmd_kategori(chat_id, user_id):
         icon = c.get("icon", "📦")
         tipe = "💰" if c["type"] == "I" else "💳"
         global_tag = " 🌐" if c.get("user_id") == 0 else ""
-        msg += f"\n#{c['id']} {icon} {c['name']} {tipe}{global_tag}"
+        msg += f"\n#{escape_html(str(c['id']))} {escape_html(icon)} {escape_html(c['name'])} {tipe}{global_tag}"
     msg += "\n\n/editkat <id> <nama>\n/hapuskat <id>\n/tambahkat <I/E> <nama>"
     send(chat_id, msg, parse_mode="HTML")
 
@@ -591,7 +591,7 @@ Aturan:
 
     result = claude([{"role": "user", "content": prompt}], 200)
     if not result:
-        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• <code>beli telur 20rb</code>\n• <code>gaji 5 juta 28 juli</code>")
+        send(chat_id, "❌ Gagal memproses. Coba format jelas:\n• <code>beli telur 20rb</code>\n• <code>gaji 5 juta 28 juli</code>", parse_mode="HTML")
         return
 
     try:
