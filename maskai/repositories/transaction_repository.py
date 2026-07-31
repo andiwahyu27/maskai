@@ -41,10 +41,12 @@ def create_transaction(*, user_id: int, update_id: Optional[int],
     """
     full_payload = dict(payload)
     if update_id is not None:
-        full_payload["metadata"] = {
+        metadata = dict(full_payload.get("metadata") or {})
+        metadata.update({
             "telegram_update_id": str(update_id),
             "source": source,
-        }
+        })
+        full_payload["metadata"] = metadata
 
     result = supabase_post("maskai_transactions", full_payload)
 
@@ -76,6 +78,11 @@ def create_transaction(*, user_id: int, update_id: Optional[int],
             transaction=existing,
         )
 
+    log.error(
+        "Transaction insert failed",
+        extra={"update_id": update_id, "user_id": user_id, "source": source,
+               "status": getattr(result, 'status', 0)},
+    )
     return CreateTransactionResult(
         status=CreateTransactionStatus.FAILED,
         error=getattr(result, 'error', 'Unknown error'),

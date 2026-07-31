@@ -231,7 +231,6 @@ def main():
             if not data.get("ok"):
                 continue
             for upd in data.get("result", []):
-                offset = upd["update_id"] + 1
                 msg = upd.get("message") or upd.get("edited_message")
                 cb = upd.get("callback_query")
                 if cb:
@@ -266,6 +265,8 @@ def main():
                         log.info("Stop signal received")
                         offset_store.save(offset)
                         return
+                # Advance offset only after successful processing
+                offset = upd["update_id"] + 1
         except requests.RequestException as exc:
             err_count += 1
             log.error("Polling request error (%s/5): %s", err_count, exc)

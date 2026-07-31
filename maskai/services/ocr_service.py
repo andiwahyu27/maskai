@@ -110,6 +110,9 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         source="ocr",
     )
     if result.status in (CreateTransactionStatus.CREATED, CreateTransactionStatus.ALREADY_EXISTS):
-        send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
+        if result.status == CreateTransactionStatus.ALREADY_EXISTS:
+            send(chat_id, "✅ Transaksi ini sudah pernah diproses sebelumnya.", parse_mode="HTML")
+        else:
+            send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
