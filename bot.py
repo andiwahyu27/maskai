@@ -98,7 +98,7 @@ def api_get(url, **kw):
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as exc:
         log.error("API GET request error: %s", exc)
-        return ApiResult(False, error=str(e)[:200])
+        return ApiResult(False, error=str(exc)[:200])
 
 def api_post(url, json=None, data=None, **kw):
     """Safe POST with typed result"""
@@ -119,7 +119,7 @@ def api_post(url, json=None, data=None, **kw):
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as exc:
         log.error("API POST request error: %s", exc)
-        return ApiResult(False, error=str(e)[:200])
+        return ApiResult(False, error=str(exc)[:200])
 
 def tg(method, data=None):
     """Telegram API call"""
@@ -191,7 +191,7 @@ def api_patch(url, json=None, **kw):
     except ValueError:
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as e:
-        return ApiResult(False, error=str(e)[:200])
+        return ApiResult(False, error=str(exc)[:200])
 
 def api_delete(url, **kw):
     """Safe DELETE with typed result"""
@@ -206,7 +206,7 @@ def api_delete(url, **kw):
     except requests.ConnectionError:
         return ApiResult(False, error="connection")
     except requests.RequestException as e:
-        return ApiResult(False, error=str(e)[:200])
+        return ApiResult(False, error=str(exc)[:200])
 
 def supabase_patch(table, filters, data):
     """Supabase PATCH. Returns ApiResult — check .ok"""
