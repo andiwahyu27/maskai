@@ -26,6 +26,8 @@ class Config:
     TZ: ZoneInfo = ZoneInfo("Asia/Jakarta")
     LOG_LEVEL: str = "INFO"
     OFFSET_FILE: str = "/var/lib/maskai-bot/offset.txt"
+    GOOGLE_CREDS_FILE: str = "/home/ubuntu/maskai/service-account.json"
+    GOOGLE_SHEET_ID: str = ""
     ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
 
     def __post_init__(self):
@@ -43,7 +45,7 @@ def from_env() -> "Config":
     token = os.environ.get("BOT_TOKEN", "")
     return Config(
         BOT_TOKEN=token,
-        SUPABASE_URL=os.environ.get("SUPABASE_URL", "https://pgnzzukciwtcxyzjuxlc.supabase.co"),
+        SUPABASE_URL=os.environ.get("SUPABASE_URL", ""),
         SUPABASE_KEY=os.environ.get("SUPABASE_KEY", ""),
         DAHONO_KEY=os.environ.get("DAHONO_KEY", ""),
         TELEGRAM_API=f"https://api.telegram.org/bot{token}",
@@ -55,6 +57,8 @@ def from_env() -> "Config":
         TZ=ZoneInfo(tz_str),
         LOG_LEVEL=os.environ.get("LOG_LEVEL", "INFO"),
         OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt"),
+        GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE", "/home/ubuntu/maskai/service-account.json"),
+        GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID", "1dBkYHEGsftjqH2NA9bd5EJ58Cc_HYKt8rVoWk0RdQUg"),
     )
 
 # Load config
@@ -896,11 +900,9 @@ def process(msg, update_id=None):
             from oauth2client.service_account import ServiceAccountCredentials
             
             scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-            creds = ServiceAccountCredentials.from_json_keyfile_name("/home/ubuntu/maskai/service-account.json", scope)
+            creds = ServiceAccountCredentials.from_json_keyfile_name(config.GOOGLE_CREDS_FILE, scope)
             client = gspread.authorize(creds)
-            
-            sheet_id = "1dBkYHEGsftjqH2NA9bd5EJ58Cc_HYKt8rVoWk0RdQUg"
-            sheet = client.open_by_key(sheet_id).sheet1
+            sheet = client.open_by_key(config.GOOGLE_SHEET_ID).sheet1
             
             # Fetch all transactions
             tx_result = supabase_get("maskai_transactions", {
