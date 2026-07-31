@@ -380,15 +380,19 @@ def cmd_debt(chat_id, user_id, text):
     if len(args) < 2 or not args[1].replace(".","").isdigit():
         send(chat_id, f"Format: {cmd} <nama> <jumlah> <desk>")
         return
+    amount, err = parse_positive_amount(args[1])
+    if err:
+        send(chat_id, f"❌ {err}")
+        return
     data = {"user_id": user_id, "direction": "O" if is_hutang else "T",
-            "counterparty": args[0], "amount": float(args[1]),
+            "counterparty": args[0], "amount": format(amount, "f"),
             "description": " ".join(args[2:]) or "-", "status": "open", "currency": "IDR"}
     result = supabase_post("maskai_debts", data)
     if not result.ok:
         send(chat_id, "❌ Gagal menyimpan.")
         return
     label = "Hutang" if is_hutang else "Piutang"
-    send(chat_id, f"📝 <b>{label}</b>\nRp {float(args[1]):,.0f}\n👤 {args[0]}", parse_mode="HTML")
+    send(chat_id, f"📝 <b>{label}</b>\nRp {amount:,.0f}\n👤 {args[0]}", parse_mode="HTML")
 
 def cmd_keranjang(chat_id, user_id, text):
     rest = text[11:].strip()
@@ -396,10 +400,14 @@ def cmd_keranjang(chat_id, user_id, text):
     if not args or not args[0].replace(".","").isdigit():
         send(chat_id, "Format: /keranjang <jumlah> <desk>")
         return
-    result = supabase_post("maskai_keranjang", {"user_id": user_id, "amount": float(args[0]),
+    price, err = parse_positive_amount(args[0])
+    if err:
+        send(chat_id, f"❌ {err}")
+        return
+    result = supabase_post("maskai_keranjang", {"user_id": user_id, "amount": format(price, "f"),
         "description": " ".join(args[1:]) or "-"})
     if result.ok:
-        send(chat_id, f"🛒 <b>Keranjang</b>\nRp {float(args[0]):,.0f}\n_Status: Belum teralisasi_", parse_mode="HTML")
+        send(chat_id, f"🛒 <b>Keranjang</b>\nRp {price:,.0f}\n<i>Status: Belum teralisasi</i>", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan ke keranjang.")
 
@@ -545,7 +553,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         return
 
     result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": "E", "amount": str(total),
+        "user_id": user_id, "type": "E", "amount": format(total, "f"),
         "category_id": fallback_cat, "description": f"{data.get('items','-')} ({data.get('toko','Struk')})",
         "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")), "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "ocr"} if update_id else None
@@ -580,7 +588,14 @@ Aturan:
         send(chat_id, "❌ Gagal parse. Coba lagi.")
         return
 
-    tx_type = "I" if data.get("jenis") == "pemasukan" else "E"
+    # Validate transaction type — reject invalid, don't default to expense
+    jenis = str(data.get("jenis", "")).strip().lower()
+    type_map = {"pemasukan": "I", "income": "I", "masuk": "I",
+                "pengeluaran": "E", "expense": "E", "keluar": "E"}
+    tx_type = type_map.get(jenis)
+    if tx_type is None:
+        send(chat_id, "❌ Jenis transaksi harus pemasukan atau pengeluaran.")
+        return
     amount = data.get("jumlah", 0)
     
     # Validate amount
@@ -595,7 +610,7 @@ Aturan:
     # If no date provided, ask user
     if not tgl:
         # Save pending tx
-        pending[chat_id] = {"type": tx_type, "amount": amount, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
+        pending[chat_id] = {"type": tx_type, "amount": format(amount, "f"), "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
         send(chat_id, f"📅 <b>Kapan tanggal transaksinya?</b>\nTulis: <code>28 juli</code> atau <code>kemarin</code> atau <code>hari ini</code>", parse_mode="HTML")
         return
     
@@ -621,7 +636,7 @@ Aturan:
         return
 
     result = supabase_post("maskai_transactions", {
-        "user_id": user_id, "type": tx_type, "amount": amt, "category_id": cat_id,
+        "user_id": user_id, "type": tx_type, "amount": format(amt, "f"), "category_id": cat_id,
         "description": desc, "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(update_id), "source": "natural"} if update_id else None
     })
@@ -673,7 +688,7 @@ def handle_pending_date(chat_id, text):
         return
     
     result = supabase_post("maskai_transactions", {
-        "user_id": p["user_id"], "type": p["type"], "amount": p["amount"], "category_id": cat_id,
+        "user_id": p["user_id"], "type": p["type"], "amount": format(p["amount"], "f"), "category_id": cat_id,
         "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
         "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
     })
