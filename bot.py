@@ -274,7 +274,7 @@ def cmd_start(chat_id):
     msg = """🤖 <b>MASKAI Bot v2</b>
 
 💰 <b>Input Natural</b> — ketik bebas:
-• <code>beli telur 20rb di toko</code> → pengeluaran
+• <code>beli telur 20rb</code> → pengeluaran
 • <code>gaji 5 juta</code> → pemasukan
 • <code>jajan bakso 15rb</code> → pengeluaran
 • <code>pemasukan 1jt dari honor</code>
@@ -284,22 +284,22 @@ def cmd_start(chat_id):
 • <code>/laporan hari ini</code>
 • <code>/laporan minggu ini</code>
 • <code>/laporan bulan ini</code>
-• <code>/laporan 2026-07-20 2026-07-28</code>
+• <code>/laporan 2026-07-01 2026-07-31</code>
 
-📋 <b>Kategori</b>:
-• <code>/kategori</code> — lihat semua
-• <code>/editkat <id> <nama baru></code> — edit
-• <code>/hapuskat <id></code> — hapus
-• <code>/tambahkat <I/E> <nama> [icon]</code> — tambah
-
-💰 <code>/saldo</code> — cek saldo
-📝 <code>/hutang <nama> <jumlah></code> <code>/piutang <nama> <jumlah></code>
-🛒 <code>/keranjang <jumlah> <desk></code>
-📌 <code>/status</code> — cek bot"""
-    send(chat_id, msg, parse_mode="HTML")
-
-def cmd_laporan(chat_id, user_id, text):
-    """Handle /laporan"""
+🛠 <b>Tools</b>:
+• <code>/kategori</code> — lihat daftar kategori
+• <code>/tambahkat &lt;I/E&gt; &lt;nama&gt; [icon]</code>
+• <code>/editkat &lt;id&gt; &lt;nama baru&gt;</code>
+• <code>/hapuskat &lt;id&gt;</code>
+• <code>/saldo</code> — cek saldo
+• <code>/hutang &lt;nama&gt; &lt;jumlah&gt;</code>
+• <code>/piutang &lt;nama&gt; &lt;jumlah&gt;</code>
+• <code>/keranjang &lt;jumlah&gt; &lt;desk&gt;</code>
+• <code>/ocr</code> — reply foto struk
+• <code>/menu</code> — daftar perintah
+• <code>/status</code> — info bot
+• <code>/sync</code> — sinkronisasi ke Google Sheets
+• <code>/usage</code> — penggunaan database"""
     parts = text.strip().split()
     now = datetime.now(TZ)
 
@@ -437,7 +437,7 @@ def cmd_kategori(chat_id, user_id):
         tipe = "💰" if c["type"] == "I" else "💳"
         global_tag = " 🌐" if c.get("user_id") == 0 else ""
         msg += f"\n#{escape_html(str(c['id']))} {escape_html(icon)} {escape_html(c['name'])} {tipe}{global_tag}"
-    msg += "\n\n/editkat <id> <nama>\n/hapuskat <id>\n/tambahkat <I/E> <nama>"
+    msg += "\n\n<code>/editkat &lt;id&gt; &lt;nama&gt;</code>\n<code>/hapuskat &lt;id&gt;</code>\n<code>/tambahkat &lt;I/E&gt; &lt;nama&gt;</code>"
     send(chat_id, msg, parse_mode="HTML")
 
 def cmd_editkat(chat_id, user_id, text):
