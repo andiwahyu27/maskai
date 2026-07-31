@@ -2,30 +2,94 @@
 """MASKAI Bot v2 - Stable Telegram Finance Tracker"""
 import os, sys, json, logging, time as time_module, re, requests, html
 from datetime import datetime, timedelta, time
+from dataclasses import dataclass, field
+from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
-# ── Config ──
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://pgnzzukciwtcxyzjuxlc.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-DAHONO_KEY = os.environ.get("DAHONO_KEY", "")
-DAHONO_URL = "https://gateway.dahono.com/v1"
-TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-OFFSET_FILE = os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt")
+# ── Centralized Config ──
+@dataclass(frozen=True)
+class Config:
+    """All configuration from environment — validated at startup"""
+    # Mandatory
+    BOT_TOKEN: str
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+    DAHONO_KEY: str
+    # Optional with safe defaults
+    DAHONO_URL: str = "https://gateway.dahono.com/v1"
+    TELEGRAM_API: str = ""
+    SUPABASE_HEADERS: dict = field(default_factory=dict)
+    HTTP_TIMEOUT: int = 15
+    HTTP_TIMEOUT_LONG: int = 30
+    HTTP_TIMEOUT_SHORT: int = 5
+    POLL_TIMEOUT: int = 35
+    TZ: ZoneInfo = ZoneInfo("Asia/Jakarta")
+    LOG_LEVEL: str = "INFO"
+    OFFSET_FILE: str = "/var/lib/maskai-bot/offset.txt"
+    ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
+
+    def __post_init__(self):
+        # Validate mandatory
+        missing = []
+        if not self.BOT_TOKEN: missing.append("BOT_TOKEN")
+        if not self.SUPABASE_URL: missing.append("SUPABASE_URL")
+        if not self.SUPABASE_KEY: missing.append("SUPABASE_KEY")
+        if not self.DAHONO_KEY: missing.append("DAHONO_KEY")
+        if missing:
+            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+
+def from_env() -> "Config":
+    tz_str = os.environ.get("TZ", "Asia/Jakarta")
+    token = os.environ.get("BOT_TOKEN", "")
+    return Config(
+        BOT_TOKEN=token,
+        SUPABASE_URL=os.environ.get("SUPABASE_URL", "https://pgnzzukciwtcxyzjuxlc.supabase.co"),
+        SUPABASE_KEY=os.environ.get("SUPABASE_KEY", ""),
+        DAHONO_KEY=os.environ.get("DAHONO_KEY", ""),
+        TELEGRAM_API=f"https://api.telegram.org/bot{token}",
+        SUPABASE_HEADERS={
+            "apikey": os.environ.get("SUPABASE_KEY", ""),
+            "Authorization": f"Bearer {os.environ.get('SUPABASE_KEY', '')}",
+            "Content-Type": "application/json",
+        },
+        TZ=ZoneInfo(tz_str),
+        LOG_LEVEL=os.environ.get("LOG_LEVEL", "INFO"),
+        OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE", "/var/lib/maskai-bot/offset.txt"),
+    )
+
+# Load config
+try:
+    config = from_env()
+except RuntimeError as e:
+    if __name__ == "__main__":
+        print(f"FATAL: {e}", file=sys.stderr)
+        sys.exit(1)
+    # In test/import mode, create with empty defaults
+    config = Config(BOT_TOKEN="test", SUPABASE_URL="test", SUPABASE_KEY="test", DAHONO_KEY="test")
+
+# Backward-compat aliases
+SUPABASE_URL = config.SUPABASE_URL
+SUPABASE_KEY = config.SUPABASE_KEY
+BOT_TOKEN = config.BOT_TOKEN
+DAHONO_KEY = config.DAHONO_KEY
+DAHONO_URL = config.DAHONO_URL
+TELEGRAM_API = config.TELEGRAM_API
+SUPABASE_HEADERS = config.SUPABASE_HEADERS
+TZ = config.TZ
+OFFSET_FILE = config.OFFSET_FILE
+JAKARTA_TZ = ZoneInfo("Asia/Jakarta")
+ADMIN_IDS = config.ADMIN_IDS
+
+logging.basicConfig(level=getattr(logging, config.LOG_LEVEL), format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger("maskai")
+BOT_START_TIME = time_module.time()
+pending = {}
+
+# Ensure offset directory exists
 try:
     os.makedirs(os.path.dirname(OFFSET_FILE), exist_ok=True)
 except PermissionError:
     OFFSET_FILE = "/tmp/maskai_offset.txt"
-SUPABASE_HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("maskai")
-BOT_START_TIME = time_module.time()
-ADMIN_IDS = [1367356347]
-pending = {}  # pending date responses
-
-from zoneinfo import ZoneInfo
-JAKARTA_TZ = ZoneInfo("Asia/Jakarta")
-TZ = ZoneInfo(os.environ.get("TZ", "Asia/Jakarta"))
 
 def build_jakarta_date_range(start_str, end_str):
     """Build timezone-aware half-open date range for queries"""
@@ -82,7 +146,7 @@ class ApiResult:
 def api_get(url, **kw):
     """Safe GET with typed result"""
     try:
-        r = requests.get(url, timeout=kw.pop("timeout", 15), **kw)
+        r = requests.get(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API GET %s: %s", r.status_code, r.text[:100])
             return ApiResult(False, status=r.status_code, error=r.text[:200])
@@ -103,7 +167,7 @@ def api_get(url, **kw):
 def api_post(url, json=None, data=None, **kw):
     """Safe POST with typed result"""
     try:
-        r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", 15), **kw)
+        r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API POST %s: %s", r.status_code, r.text[:100])
             return ApiResult(False, status=r.status_code, error=r.text[:200])
@@ -142,7 +206,7 @@ def claude(messages, max_tokens=500):
     try:
         r = requests.post(f"{DAHONO_URL}/chat/completions",
             json={"model": "dahono/claude-sonnet-4.5-free", "messages": messages, "max_tokens": max_tokens},
-            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
+            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=config.HTTP_TIMEOUT_LONG)
         if r.status_code != 200 or not r.text:
             log.warning(f"Claude HTTP {r.status_code}: {r.text[:100]}")
             return None
@@ -176,7 +240,7 @@ def supabase_delete(table, field, value):
 def api_patch(url, json=None, **kw):
     """Safe PATCH with typed result"""
     try:
-        r = requests.patch(url, json=json, timeout=kw.pop("timeout", 15), **kw)
+        r = requests.patch(url, json=json, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API PATCH %s: %s", r.status_code, r.text[:100])
             return ApiResult(False, status=r.status_code, error=r.text[:200])
@@ -196,7 +260,7 @@ def api_patch(url, json=None, **kw):
 def api_delete(url, **kw):
     """Safe DELETE with typed result"""
     try:
-        r = requests.delete(url, timeout=kw.pop("timeout", 15), **kw)
+        r = requests.delete(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API DELETE %s: %s", r.status_code, r.text[:100])
             return ApiResult(False, status=r.status_code, error=r.text[:200])
@@ -528,7 +592,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
 
     try:
         r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
-            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
+            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=config.HTTP_TIMEOUT_LONG)
         if r.status_code != 200 or not r.text:
             log.error(f"OCR error {r.status_code}: {r.text[:200] if r.text else 'empty'}")
             send(chat_id, "❌ Gagal membaca struk.")
@@ -747,7 +811,7 @@ def cmd_usage(chat_id):
     for t, label in tables.items():
         try:
             r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
-                headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+                headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=config.HTTP_TIMEOUT_SHORT)
             if r.status_code < 200 or r.status_code >= 300:
                 msg += f"  {label}: error ({r.status_code})\n"
                 continue
@@ -816,7 +880,7 @@ def process(msg, update_id=None):
         db = {}
         for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
             try:
-                r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+                r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count", headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=config.HTTP_TIMEOUT_SHORT)
                 if r.status_code < 200 or r.status_code >= 300:
                     db[t] = f"err({r.status_code})"
                 else:
@@ -902,7 +966,7 @@ def process(msg, update_id=None):
         failed = []
         for table in ["maskai_transactions", "maskai_debts", "maskai_keranjang"]:
             try:
-                r = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=SUPABASE_HEADERS, timeout=10)
+                r = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=SUPABASE_HEADERS, timeout=config.HTTP_TIMEOUT)
                 if r.status_code < 200 or r.status_code >= 300:
                     failed.append(f"{table}({r.status_code})")
             except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
@@ -943,14 +1007,14 @@ def main():
     while True:
         try:
             r = requests.get(f"{TELEGRAM_API}/getUpdates",
-                params={"offset": offset, "timeout": 30}, timeout=35)
+                params={"offset": offset, "timeout": 30}, timeout=config.POLL_TIMEOUT)
             if r.status_code < 200 or r.status_code >= 300:
                 err_count += 1
                 log.warning(f"getUpdates {r.status_code} ({err_count}/5)")
                 if err_count >= 5:
                     log.critical("Max errors, stopping.")
                     break
-                time_module.sleep(5)
+                time_module.sleep(config.HTTP_TIMEOUT_SHORT)
                 continue
 
             data = r.json()
@@ -958,7 +1022,7 @@ def main():
                 err_count += 1
                 log.warning(f"getUpdates failed ({err_count}/5): {data}")
                 if err_count >= 5: break
-                time_module.sleep(5)
+                time_module.sleep(config.HTTP_TIMEOUT_SHORT)
                 continue
 
             err_count = 0
@@ -1033,12 +1097,12 @@ def main():
             if err_count >= 5:
                 log.critical("Polling failed %s times, stopping", err_count)
                 break
-            time_module.sleep(5)
+            time_module.sleep(config.HTTP_TIMEOUT_SHORT)
         except (ValueError, OSError) as exc:
             err_count += 1
             log.error("Loop error (%s/5): %s", err_count, exc)
             if err_count >= 5: break
-            time_module.sleep(5)
+            time_module.sleep(config.HTTP_TIMEOUT_SHORT)
 
 if __name__ == "__main__":
     main()
