@@ -352,7 +352,7 @@ def cmd_laporan(chat_id, user_id, text):
         txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
 
     if not txs:
-        send(chat_id, f"📊 <b>Laporan {periode}</b>\n\nBelum ada transaksi.", parse_mode="HTML")
+        send(chat_id, f"📊 <b>Laporan {escape_html(periode)}</b>\n\nBelum ada transaksi.", parse_mode="HTML")
         return
 
     cat_result = supabase_get("maskai_categories", {"select": "id,name"})
@@ -450,7 +450,7 @@ def cmd_editkat(chat_id, user_id, text):
     new_name = " ".join(parts[2:])
     ok, err = update_owned_category(cat_id, user_id, {"name": new_name})
     if ok:
-        send(chat_id, f"✅ Kategori #{cat_id} diubah jadi <b>{escape_html(new_name)}</b>", parse_mode="HTML")
+        send(chat_id, f"✅ Kategori #{escape_html(cat_id)} diubah jadi <b>{escape_html(new_name)}</b>", parse_mode="HTML")
     else:
         send(chat_id, f"❌ {err}")
 
@@ -965,7 +965,7 @@ def main():
                             keyboard["inline_keyboard"].append(
                                 [{"text": "🔙 Kembali", "callback_data": "menu_kategori"}]
                             )
-                            send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {label}\n\n/editkat {cat_id} <nama baru>", parse_mode="HTML", reply_markup=keyboard)
+                            send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {escape_html(label)}\n\n<code>/editkat {escape_html(cat_id)} &lt;nama baru&gt;</code>", parse_mode="HTML", reply_markup=keyboard)
                         elif data_cb.startswith("katdelok_"):
                             cat_id = data_cb.split("_")[1]
                             ok, err = delete_owned_category(cat_id, cb_user_id)
