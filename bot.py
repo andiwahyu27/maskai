@@ -533,18 +533,10 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, "❌ Struk tidak jelas. Coba foto ulang.")
         return
 
-    # Validate OCR amount using Decimal
-    from decimal import Decimal, InvalidOperation
-    try:
-        total = Decimal(str(data.get("total", 0)))
-        if total <= 0:
-            send(chat_id, "❌ Jumlah di struk tidak valid.")
-            return
-        if total > 999999999.99:
-            send(chat_id, "❌ Jumlah terlalu besar.")
-            return
-    except (InvalidOperation, ValueError):
-        send(chat_id, "❌ Jumlah di struk tidak valid.")
+    # Validate OCR amount using shared parser
+    total, err = parse_positive_amount(data.get("total"))
+    if err:
+        send(chat_id, f"❌ Jumlah di struk tidak valid: {err}")
         return
 
     fallback_cat = get_fallback_category(user_id, "E")
@@ -610,7 +602,7 @@ Aturan:
     # If no date provided, ask user
     if not tgl:
         # Save pending tx
-        pending[chat_id] = {"type": tx_type, "amount": format(amount, "f"), "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
+        pending[chat_id] = {"type": tx_type, "amount": amt, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
         send(chat_id, f"📅 <b>Kapan tanggal transaksinya?</b>\nTulis: <code>28 juli</code> atau <code>kemarin</code> atau <code>hari ini</code>", parse_mode="HTML")
         return
     
