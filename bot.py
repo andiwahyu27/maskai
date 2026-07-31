@@ -83,7 +83,7 @@ def api_get(url, **kw):
     """Safe GET with typed result"""
     try:
         r = requests.get(url, timeout=kw.pop("timeout", 15), **kw)
-        if r.status_code != 200:
+        if r.status_code < 200 or r.status_code >= 300:
             log.warning(f"API GET {r.status_code}: {r.text[:100]}")
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         return ApiResult(True, data=r.json() if r.text else None, status=200)
@@ -148,7 +148,7 @@ def claude(messages, max_tokens=500):
             return None
         body = r.json()
         return body["choices"][0]["message"]["content"]
-    except (ValueError, KeyError, IndexError, requests.Timeout, requests.ConnectionError) as e:
+    except (ValueError, KeyError, IndexError, requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
         log.error(f"Claude error: {e}")
         return None
 
@@ -300,6 +300,10 @@ def cmd_start(chat_id):
 • <code>/status</code> — info bot
 • <code>/sync</code> — sinkronisasi ke Google Sheets
 • <code>/usage</code> — penggunaan database"""
+    send(chat_id, msg, parse_mode="HTML")
+
+def cmd_laporan(chat_id, user_id, text):
+    """Handle /laporan"""
     parts = text.strip().split()
     now = datetime.now(TZ)
 
@@ -522,12 +526,20 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         "max_tokens": 300
     }
 
-    r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
-        headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
-
-    if r.status_code != 200 or not r.text:
-        log.error(f"OCR error {r.status_code}: {r.text[:200] if r.text else 'empty'}")
-        send(chat_id, "❌ Gagal membaca struk.")
+    try:
+        r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
+            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=30)
+        if r.status_code != 200 or not r.text:
+            log.error(f"OCR error {r.status_code}: {r.text[:200] if r.text else 'empty'}")
+            send(chat_id, "❌ Gagal membaca struk.")
+            return
+    except requests.Timeout:
+        log.error("OCR request timeout")
+        send(chat_id, "❌ OCR timeout. Coba lagi.")
+        return
+    except requests.ConnectionError:
+        log.error("OCR connection error")
+        send(chat_id, "❌ Gagal terhubung ke OCR.")
         return
 
     try:
@@ -729,11 +741,17 @@ def cmd_usage(chat_id):
     total_rows = 0
     msg = "📊 <b>Supabase Usage</b>\n\n"
     for t, label in tables.items():
-        r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
-            headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
-        ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
-        total_rows += int(ct) if ct.isdigit() else 0
-        msg += f"  {label}: {ct}\n"
+        try:
+            r = requests.get(f"{SUPABASE_URL}/rest/v1/{t}?select=count",
+                headers={**SUPABASE_HEADERS, "Prefer": "count=exact"}, timeout=5)
+            if r.status_code < 200 or r.status_code >= 300:
+                msg += f"  {label}: error ({r.status_code})\n"
+                continue
+            ct = r.headers.get("content-range", "").split("/")[-1] if "content-range" in r.headers else "?"
+            total_rows += int(ct) if ct.isdigit() else 0
+            msg += f"  {label}: {ct}\n"
+        except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
+            msg += f"  {label}: gagal ({type(e).__name__})\n"
     est_size_mb = (total_rows * 0.5) / 1024
     msg += f"\n📦 <b>Estimasi:</b>\n  Total rows: {total_rows}\n  Est. size: {est_size_mb:.1f} MB"
     send(chat_id, msg, parse_mode="HTML")
@@ -907,7 +925,7 @@ def main():
         try:
             r = requests.get(f"{TELEGRAM_API}/getUpdates",
                 params={"offset": offset, "timeout": 30}, timeout=35)
-            if r.status_code != 200:
+            if r.status_code < 200 or r.status_code >= 300:
                 err_count += 1
                 log.warning(f"getUpdates {r.status_code} ({err_count}/5)")
                 if err_count >= 5:
