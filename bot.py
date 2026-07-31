@@ -26,7 +26,7 @@ class Config:
     TZ: ZoneInfo = ZoneInfo("Asia/Jakarta")
     LOG_LEVEL: str = "INFO"
     OFFSET_FILE: str = "/var/lib/maskai-bot/offset.txt"
-    GOOGLE_CREDS_FILE: str = "/home/ubuntu/maskai/service-account.json"
+    GOOGLE_CREDS_FILE: str = ""
     GOOGLE_SHEET_ID: str = ""
     ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
 
@@ -895,6 +895,9 @@ def process(msg, update_id=None):
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
+        if not config.GOOGLE_CREDS_FILE or not config.GOOGLE_SHEET_ID:
+            send(chat_id, "❌ Konfigurasi Google Sheets belum lengkap. Set GOOGLE_CREDS_FILE dan GOOGLE_SHEET_ID di .env")
+            return
         try:
             import gspread
             from oauth2client.service_account import ServiceAccountCredentials
