@@ -895,9 +895,18 @@ def process(msg, update_id=None):
             send(chat_id, "❌ Hanya admin yang bisa.")
             return
         # Delete all transactions, debts, keranjang
+        failed = []
         for table in ["maskai_transactions", "maskai_debts", "maskai_keranjang"]:
-            r = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=SUPABASE_HEADERS, timeout=10)
-        send(chat_id, "✅ Database dikosongkan.\nSemua transaksi, hutang/piutang, dan keranjang dihapus.")
+            try:
+                r = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}?user_id=eq.{user_id}", headers=SUPABASE_HEADERS, timeout=10)
+                if r.status_code < 200 or r.status_code >= 300:
+                    failed.append(f"{table}({r.status_code})")
+            except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
+                failed.append(f"{table}({type(e).__name__})")
+        if failed:
+            send(chat_id, f"⚠️ Sebagian gagal: {', '.join(failed)}")
+        else:
+            send(chat_id, "✅ Database dikosongkan.\nSemua transaksi, hutang/piutang, dan keranjang dihapus.")
     elif cmd == "/stop":
         if user_id in ADMIN_IDS:
             send(chat_id, "🛑 Bot dihentikan.")
