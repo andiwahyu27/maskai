@@ -1,12 +1,12 @@
 """MASKAI — OCR service"""
-import json, logging, re
+import json, logging, re, requests
 from datetime import datetime
-from maskai.config import config, DAHONO_URL, DAHONO_KEY, TZ
-from maskai.clients.telegram import send
+from maskai.config import config, DAHONO_URL, DAHONO_KEY, TZ, BOT_TOKEN
+from maskai.clients.telegram import send, tg
 from maskai.clients.supabase import supabase_get, supabase_post
-from maskai.clients.dahono import claude
 from maskai.utils.validation import parse_positive_amount
 from maskai.utils.html import escape_html
+from maskai.app import get_fallback_category
 
 log = logging.getLogger("maskai.services.ocr")
 

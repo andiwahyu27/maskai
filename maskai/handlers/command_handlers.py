@@ -352,45 +352,6 @@ def get_fallback_category(user_id, tx_type):
             return cats[0]["id"]
     return None
 
-def handle_pending_date(chat_id, text):
-    """Process user's date reply for pending transaction"""
-    if chat_id not in pending:
-        return
-    p = pending.pop(chat_id)
-    
-    # Convert "28 juli" or "hari ini" to YYYY-MM-DD
-    tgl = text.strip().lower()
-    if tgl in ("hari ini", "today", ""):
-        tgl = datetime.now().strftime("%Y-%m-%d")
-    elif tgl == "kemarin":
-        tgl = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    else:
-        # Try to parse
-        try:
-            dt = datetime.strptime(tgl.replace("juli","July").replace("juni","June").replace("agustus","August"), "%d %B")
-            tgl = dt.strftime(f"{datetime.now().year}-%m-%d")
-        except (ValueError, IndexError):
-            tgl = datetime.now().strftime("%Y-%m-%d")  # fallback
-    
-    result = supabase_get("maskai_categories", {"name": f"ilike.{p['cat']}", "type": f"eq.{p['type']}", "select": "id", "limit": "1"})
-    cats = result.data if result.ok and isinstance(result.data, list) else []
-    cat_id = cats[0]["id"] if cats else get_fallback_category(p["user_id"], p["type"])
-    if not cat_id:
-        send(chat_id, "❌ Kategori tidak ditemukan.")
-        return
-    
-    result = supabase_post("maskai_transactions", {
-        "user_id": p["user_id"], "type": p["type"], "amount": format(p["amount"], "f"), "category_id": cat_id,
-        "description": p["desc"], "transaction_dt": tgl, "currency": "IDR",
-        "metadata": {"telegram_update_id": str(p.get("update_id")), "source": "natural"} if p.get("update_id") else None
-    })
-    if not result.ok:
-        send(chat_id, "❌ Gagal menyimpan transaksi.")
-        return
-    
-    label = "Pemasukan" if p["type"] == "I" else "Pengeluaran"
-    send(chat_id, f"✅ <b>{label}</b>\nRp {p['amount']:,.0f}\n{escape_html(p['desc'])}\nKategori: {escape_html(p['cat'])}\n📅 {tgl}", parse_mode="HTML")
-
 def cmd_usage(chat_id):
     """Show Supabase usage stats — uses supabase_get"""
     send(chat_id, "⏳ Cek usage Supabase...")
