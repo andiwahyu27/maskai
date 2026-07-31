@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MASKAI Bot v2 - Stable Telegram Finance Tracker"""
-import os, sys, json, logging, time, re, requests, html
-from datetime import datetime, timedelta
+import os, sys, json, logging, time as time_module, re, requests, html
+from datetime import datetime, timedelta, time
 
 # ── Config ──
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://pgnzzukciwtcxyzjuxlc.supabase.co")
@@ -19,12 +19,23 @@ SUPABASE_HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("maskai")
-BOT_START_TIME = time.time()
+BOT_START_TIME = time_module.time()
 ADMIN_IDS = [1367356347]
 pending = {}  # pending date responses
 
 from zoneinfo import ZoneInfo
+JAKARTA_TZ = ZoneInfo("Asia/Jakarta")
 TZ = ZoneInfo(os.environ.get("TZ", "Asia/Jakarta"))
+
+def build_jakarta_date_range(start_str, end_str):
+    """Build timezone-aware half-open date range for queries"""
+    start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+    end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+    if start_date > end_date:
+        raise ValueError("Tanggal awal tidak boleh setelah tanggal akhir")
+    start_dt = datetime.combine(start_date, time.min, tzinfo=JAKARTA_TZ)
+    end_dt = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=JAKARTA_TZ)
+    return start_dt, end_dt
 
 def is_authorized(user_id):
     return user_id in ADMIN_IDS
@@ -295,10 +306,9 @@ def cmd_laporan(chat_id, user_id, text):
     if len(parts) == 3:  # date range
         try:
             d1, d2 = parts[1], parts[2]
-            # Use lt next_day instead of lte 23:59:59 for safety
-            since = f"{d1}T00:00:00"
-            next_day = (datetime.strptime(d2, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-            until = f"{next_day}T00:00:00"
+            start_dt, end_dt = build_jakarta_date_range(d1, d2)
+            since = start_dt.isoformat()
+            until = end_dt.isoformat()
             tx_result = supabase_get("maskai_transactions", [
                 ("user_id", f"eq.{user_id}"),
                 ("transaction_dt", f"gte.{since}"),
@@ -308,7 +318,11 @@ def cmd_laporan(chat_id, user_id, text):
             ])
             txs = tx_result.data if tx_result.ok and isinstance(tx_result.data, list) else []
             periode = f"{d1} s/d {d2}"
-        except (ValueError, IndexError):
+        except ValueError as e:
+            msg = str(e)
+            send(chat_id, f"❌ {msg}" if "Tanggal" in msg else "❌ Format: /laporan 2026-07-20 2026-07-28")
+            return
+        except IndexError:
             send(chat_id, "❌ Format: /laporan 2026-07-20 2026-07-28")
             return
     elif len(parts) == 1:  # last 5
@@ -770,7 +784,7 @@ def process(msg, update_id=None):
     elif cmd in ("/laporan", "/report", "/r"):
         cmd_laporan(chat_id, user_id, args)
     elif cmd == "/status":
-        uptime = time.strftime("%Hh %Mm", time.gmtime(time.time() - BOT_START_TIME))
+        uptime = time_module.strftime("%Hh %Mm", time_module.gmtime(time_module.time() - BOT_START_TIME))
         # Count DB rows
         db = {}
         for t in ["maskai_transactions","maskai_debts","maskai_keranjang","maskai_categories"]:
@@ -894,7 +908,7 @@ def main():
                 if err_count >= 5:
                     log.critical("Max errors, stopping.")
                     break
-                time.sleep(5)
+                time_module.sleep(5)
                 continue
 
             data = r.json()
@@ -902,7 +916,7 @@ def main():
                 err_count += 1
                 log.warning(f"getUpdates failed ({err_count}/5): {data}")
                 if err_count >= 5: break
-                time.sleep(5)
+                time_module.sleep(5)
                 continue
 
             err_count = 0
@@ -975,7 +989,7 @@ def main():
             err_count += 1
             log.error(f"Loop error ({err_count}/5): {e}")
             if err_count >= 5: break
-            time.sleep(5)
+            time_module.sleep(5)
 
 if __name__ == "__main__":
     main()
