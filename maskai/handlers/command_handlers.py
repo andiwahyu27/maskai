@@ -302,7 +302,7 @@ Aturan:
     # If no date provided, ask user
     if not tgl:
         # Save pending tx
-        pending[chat_id] = {"type": tx_type, "amount": amt, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
+        pending.set(chat_id, user_id, {"type": tx_type, "amount": amt, "cat": cat_name, "desc": desc, "user_id": user_id, "update_id": update_id}
         send(chat_id, f"📅 <b>Kapan tanggal transaksinya?</b>\nTulis: <code>28 juli</code> atau <code>kemarin</code> atau <code>hari ini</code>", parse_mode="HTML")
         return
     

@@ -225,9 +225,8 @@ def main():
             for upd in data.get("result", []):
                 offset = upd["update_id"] + 1
                 msg = upd.get("message") or upd.get("edited_message")
-                if msg:
-                    cb = upd.get("callback_query")
-                    if cb:
+                cb = upd.get("callback_query")
+                if cb:
                         cb_user_id = cb.get("from", {}).get("id", 0)
                         if not is_authorized(cb_user_id):
                             continue
@@ -253,6 +252,7 @@ def main():
                             ok, err = delete_owned_category(cat_id, cb_user_id)
                             send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
                         continue
+                if msg:
                     result = process(msg, upd["update_id"])
                     if result == "__STOP__":
                         log.info("Stop signal received")
