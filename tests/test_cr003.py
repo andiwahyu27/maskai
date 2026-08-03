@@ -1,5 +1,6 @@
 """CR-003 integration tests"""
 import unittest
+from unittest.mock import patch
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,9 +12,11 @@ from maskai.utils.validation import parse_positive_amount
 
 
 class TestSupabaseClient(unittest.TestCase):
-    def test_supabase_get_returns_apiresult(self):
+    @patch('maskai.clients.supabase.api_get')
+    def test_supabase_get_returns_apiresult(self, mock_get):
         """supabase_get should return ApiResult with .ok attribute"""
         from maskai.clients.http import ApiResult
+        mock_get.return_value = ApiResult(ok=True, status=200, data=[])
         result = supabase_get("maskai_categories", {"select": "id", "limit": "1"})
         self.assertTrue(hasattr(result, 'ok'))
         self.assertTrue(hasattr(result, 'data'))
