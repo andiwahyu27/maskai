@@ -184,6 +184,7 @@ class TestCoverageBoost(unittest.TestCase):
         """from_env() produces valid Config"""
         import os
         os.environ['BOT_TOKEN'] = 'test123'
+        os.environ['SUPABASE_URL'] = 'http://test'
         os.environ['SUPABASE_KEY'] = 'test456'
         os.environ['DAHONO_KEY'] = 'test789'
         from maskai.config import from_env, Config
