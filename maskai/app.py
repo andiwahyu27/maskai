@@ -237,27 +237,26 @@ def main():
                     cb = upd.get("callback_query")
                     if cb:
                         cb_user_id = cb.get("from", {}).get("id", 0)
-                        if not is_authorized(cb_user_id):
-                            continue
-                        data_cb = cb.get("data", "")
-                        chat_id = cb.get("message", {}).get("chat", {}).get("id")
-                        if data_cb == "menu_kategori":
-                            cmd_kategori(chat_id, cb_user_id)
-                        elif data_cb.startswith("kategori_"):
-                            cat_id = data_cb.split("_")[1]
-                            cat = get_accessible_category(cat_id, cb_user_id)
-                            if not cat:
-                                send(chat_id, "❌ Kategori tidak ditemukan.")
-                                continue
-                            label = "Pemasukan 💰" if cat["type"] == "I" else "Pengeluaran 💳"
-                            keyboard = {"inline_keyboard": []}
-                            if cat.get("user_id") != 0:
-                                keyboard["inline_keyboard"].append([{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"}])
-                            send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {escape_html(label)}\n\n<code>/editkat {escape_html(cat_id)} &lt;nama baru&gt;</code>", parse_mode="HTML", reply_markup=keyboard)
-                        elif data_cb.startswith("katdelok_"):
-                            cat_id = data_cb.split("_")[1]
-                            ok, err = delete_owned_category(cat_id, cb_user_id)
-                            send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
+                        if is_authorized(cb_user_id):
+                            data_cb = cb.get("data", "")
+                            chat_id = cb.get("message", {}).get("chat", {}).get("id")
+                            if data_cb == "menu_kategori":
+                                cmd_kategori(chat_id, cb_user_id)
+                            elif data_cb.startswith("kategori_"):
+                                cat_id = data_cb.split("_")[1]
+                                cat = get_accessible_category(cat_id, cb_user_id)
+                                if cat:
+                                    label = "Pemasukan 💰" if cat["type"] == "I" else "Pengeluaran 💳"
+                                    keyboard = {"inline_keyboard": []}
+                                    if cat.get("user_id") != 0:
+                                        keyboard["inline_keyboard"].append([{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"}])
+                                    send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {escape_html(label)}\n\n<code>/editkat {escape_html(cat_id)} &lt;nama baru&gt;</code>", parse_mode="HTML", reply_markup=keyboard)
+                                else:
+                                    send(chat_id, "❌ Kategori tidak ditemukan.")
+                            elif data_cb.startswith("katdelok_"):
+                                cat_id = data_cb.split("_")[1]
+                                ok, err = delete_owned_category(cat_id, cb_user_id)
+                                send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
                     elif msg:
                         result = process(msg, upd["update_id"])
                         if result == "__STOP__":
