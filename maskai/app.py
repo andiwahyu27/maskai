@@ -208,11 +208,6 @@ def _handle_pending(chat_id, user_id, text, p):
     send(chat_id, f"✅ Tersimpan!\n{p['desc']}\n💰 Rp {amount:,.0f}\n📅 {tgl}", parse_mode="HTML")
 
 # ── Main Polling Loop ──
-def main():
-    log.info("MASKAI Bot v2 starting...")
-    offset_store = OffsetStore(config.OFFSET_FILE)
-    offset = offset_store.load()
-    
 
 def process_single_update(upd, offset_store):
     """Process a single Telegram update. Returns new offset or None to keep old."""
@@ -254,6 +249,10 @@ def process_single_update(upd, offset_store):
         return None
 
 
+def main():
+    log.info("MASKAI Bot v2 starting...")
+    offset_store = OffsetStore(config.OFFSET_FILE)
+    offset = offset_store.load()
     err_count = 0
     while True:
         try:
