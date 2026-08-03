@@ -65,7 +65,6 @@ class TestOCRProduction(unittest.TestCase):
 
         # Mock duplicate response
         self.mock_create_tx.return_value = CreateTransactionResult(status=CreateTransactionStatus.ALREADY_EXISTS, transaction={"id": 99})
-        )
 
         from maskai.services.ocr_service import cmd_ocr
         cmd_ocr(chat_id=123, user_id=456, file_id="abc", update_id=88888)
