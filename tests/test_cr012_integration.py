@@ -7,10 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TestTelegramClient(unittest.TestCase):
-    @patch('maskai.clients.telegram.api_post')
-    def test_tg_success(self, mock_post):
+    @patch('maskai.clients.telegram.api_get')
+    def test_tg_success(self, mock_get):
         from maskai.clients.http import ApiResult
-        mock_post.return_value = ApiResult(ok=True, data={"ok": True, "result": {"message_id": 1}})
+        mock_get.return_value = ApiResult(ok=True, data={"ok": True, "result": {"message_id": 1}})
         from maskai.clients.telegram import tg
         result = tg("getMe")
         self.assertTrue(result.get("ok"))
