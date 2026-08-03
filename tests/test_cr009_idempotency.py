@@ -34,13 +34,15 @@ class TestTransactionRepository(unittest.TestCase):
         self.assertEqual(result.status, CreateTransactionStatus.CREATED)
         self.assertIsNotNone(result.transaction)
 
+    @patch('maskai.repositories.transaction_repository.supabase_get')
     @patch('maskai.repositories.transaction_repository.supabase_post')
-    def test_duplicate_sqlstate_23505_returns_already_exists(self, mock_post):
+    def test_duplicate_sqlstate_23505_returns_already_exists(self, mock_post, mock_get):
         """SQLSTATE 23505 → ALREADY_EXISTS"""
         mock_post.return_value = MockApiResult(
             ok=False, status=409,
             data={"code": "23505", "message": "duplicate key value violates unique constraint uq_maskai_transactions_user_update"},
         )
+        mock_get.return_value = MockApiResult(ok=True, data=[])
         result = create_transaction(
             user_id=1367356347,
             update_id=12345,
@@ -89,8 +91,9 @@ class TestUniqueViolationDetection(unittest.TestCase):
 
 
 class TestUpdateRetry(unittest.TestCase):
+    @patch('maskai.repositories.transaction_repository.supabase_get')
     @patch('maskai.repositories.transaction_repository.supabase_post')
-    def test_same_update_id_processed_twice(self, mock_post):
+    def test_same_update_id_processed_twice(self, mock_post, mock_get):
         """Same update processed twice → only one effective insert"""
         call_count = [0]
 
