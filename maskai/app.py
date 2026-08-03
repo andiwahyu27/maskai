@@ -231,22 +231,22 @@ def main():
             if not data.get("ok"):
                 continue
             for upd in data.get("result", []):
-                msg = upd.get("message") or upd.get("edited_message")
-                cb = upd.get("callback_query")
-                if cb:
+                next_offset = upd["update_id"] + 1
+                try:
+                    msg = upd.get("message") or upd.get("edited_message")
+                    cb = upd.get("callback_query")
+                    if cb:
                         cb_user_id = cb.get("from", {}).get("id", 0)
                         if not is_authorized(cb_user_id):
                             continue
                         data_cb = cb.get("data", "")
                         chat_id = cb.get("message", {}).get("chat", {}).get("id")
-                        # Category callback handler
                         if data_cb == "menu_kategori":
                             cmd_kategori(chat_id, cb_user_id)
                         elif data_cb.startswith("kategori_"):
                             cat_id = data_cb.split("_")[1]
                             cat = get_accessible_category(cat_id, cb_user_id)
                             if not cat:
-                                from maskai.clients.telegram import send
                                 send(chat_id, "❌ Kategori tidak ditemukan.")
                                 continue
                             label = "Pemasukan 💰" if cat["type"] == "I" else "Pengeluaran 💳"
@@ -258,15 +258,19 @@ def main():
                             cat_id = data_cb.split("_")[1]
                             ok, err = delete_owned_category(cat_id, cb_user_id)
                             send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
-                        continue
-                if msg:
-                    result = process(msg, upd["update_id"])
-                    if result == "__STOP__":
-                        log.info("Stop signal received")
-                        offset_store.save(offset)
-                        return
-                # Advance offset only after successful processing
-                offset = upd["update_id"] + 1
+                    elif msg:
+                        result = process(msg, upd["update_id"])
+                        if result == "__STOP__":
+                            log.info("Stop signal received")
+                            offset = next_offset
+                            offset_store.save(offset)
+                            return
+                    # Advance offset after successful processing
+                    offset = next_offset
+                    offset_store.save(offset)
+                except Exception as exc:
+                    log.error("Update processing error (%s): %s", upd["update_id"], exc)
+                    # Don't advance offset — retry on next poll
         except requests.RequestException as exc:
             err_count += 1
             log.error("Polling request error (%s/5): %s", err_count, exc)
