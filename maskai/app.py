@@ -279,7 +279,7 @@ def main():
             time_module.sleep(config.HTTP_TIMEOUT_SHORT)
         except (ValueError, OSError) as exc:
             err_count += 1
-            log.error("Loop error (%s/5): %s", err_count, exc)
+            log.error("Loop failed attempt=%s error_type=%s", err_count, type(exc).__name__)
             if err_count >= 5:
                 break
             time_module.sleep(config.HTTP_TIMEOUT_SHORT)

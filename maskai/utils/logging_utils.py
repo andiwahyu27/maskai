@@ -29,5 +29,6 @@ def safe_body_for_log(text, max_len=80):
     """Truncate response body for safe logging"""
     if not text:
         return ""
-    safe = redact_secret(str(text)[:max_len])
+    safe = redact_secret(str(text))
+    safe = safe[:max_len]
     return safe.replace("\n", " ")

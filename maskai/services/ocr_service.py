@@ -6,7 +6,7 @@ from maskai.clients.telegram import send, tg
 from maskai.clients.supabase import supabase_get, supabase_post
 from maskai.utils.validation import parse_positive_amount
 from maskai.utils.html import escape_html
-from maskai.utils.logging_utils import safe_body_for_log
+
 
 log = logging.getLogger("maskai.services.ocr")
 
@@ -44,7 +44,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
             headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=config.HTTP_TIMEOUT_LONG)
         if r.status_code != 200 or not r.text:
-            log.error("OCR error status=%s body=%s", r.status_code, safe_body_for_log(r.text, 80))
+            log.error("OCR HTTP failure status=%s", r.status_code)
             send(chat_id, "❌ Gagal membaca struk.")
             return
     except requests.Timeout:
@@ -63,7 +63,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     try:
         content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     except (ValueError, KeyError, IndexError, TypeError):
-        log.error("OCR invalid response: %s", safe_body_for_log(r.text, 80))
+        log.error("OCR invalid JSON status=%s", r.status_code)
         send(chat_id, "❌ Format hasil OCR tidak valid.")
         return
 
