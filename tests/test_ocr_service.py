@@ -7,6 +7,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TestOCRErrorBoundaries(unittest.TestCase):
+    """Tests OCR error handling — all HTTP mocked"""
+
+    def _mock_download_ok(self):
+        import io
+        mr = MagicMock()
+        mr.status_code = 200
+        mr.content = b'fake-jpeg-bytes'
+        mr.headers = {'Content-Type': 'image/jpeg'}
+        return mr
     """Tests OCR error handling — all HTTP mocked, no real network"""
 
     @patch('maskai.services.ocr_service.send')
@@ -16,6 +25,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
         import requests
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
 
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mv.side_effect = requests.Timeout()
             from maskai.services.ocr_service import cmd_ocr
@@ -29,6 +40,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
         """Vision connection error → no insert"""
         import requests
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mv.side_effect = requests.ConnectionError()
             from maskai.services.ocr_service import cmd_ocr
@@ -42,6 +55,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
         """Generic request exception → no insert"""
         import requests
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mv.side_effect = requests.RequestException("fail")
             from maskai.services.ocr_service import cmd_ocr
@@ -54,6 +69,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
     def test_invalid_json_no_insert(self, mock_tg, mock_send):
         """Vision returns malformed JSON → graceful fail"""
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mr = MagicMock()
             mr.status_code = 200
@@ -70,6 +87,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
     def test_payload_not_dict_no_insert(self, mock_tg, mock_send):
         """Vision returns list/None/string instead of dict → graceful fail"""
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mr = MagicMock()
             mr.status_code = 200
@@ -86,6 +105,8 @@ class TestOCRErrorBoundaries(unittest.TestCase):
     def test_invalid_amount_no_insert(self, mock_tg, mock_send):
         """OCR with non-numeric total → no insert"""
         mock_tg.return_value = {"ok": True, "result": {"file_path": "f.jpg"}}
+        with patch('maskai.services.ocr_service.requests.get') as mg:
+            mg.return_value = self._mock_download_ok()
         with patch('maskai.services.ocr_service.requests.post') as mv:
             mr = MagicMock()
             mr.status_code = 200

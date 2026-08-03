@@ -20,6 +20,7 @@ class Config:
     TZ: ZoneInfo = ZoneInfo("Asia/Jakarta")
     LOG_LEVEL: str = "INFO"
     OFFSET_FILE: str = "/var/lib/maskai-bot/offset.txt"
+    OCR_MAX_IMAGE_BYTES: int = 8 * 1024 * 1024
     GOOGLE_CREDS_FILE: str = ""
     GOOGLE_SHEET_ID: str = ""
     ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
@@ -42,6 +43,7 @@ def from_env():
         TZ=ZoneInfo(tz_str),
         LOG_LEVEL=os.environ.get("LOG_LEVEL","INFO"),
         OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE","/var/lib/maskai-bot/offset.txt"),
+        OCR_MAX_IMAGE_BYTES=int(os.environ.get("OCR_MAX_IMAGE_BYTES", str(8*1024*1024))),
         GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE",""),
         GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID",""),
     )
