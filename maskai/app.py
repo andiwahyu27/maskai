@@ -213,6 +213,47 @@ def main():
     offset_store = OffsetStore(config.OFFSET_FILE)
     offset = offset_store.load()
     
+
+def process_single_update(upd, offset_store):
+    """Process a single Telegram update. Returns new offset or None to keep old."""
+    next_offset = upd["update_id"] + 1
+    try:
+        msg = upd.get("message") or upd.get("edited_message")
+        cb = upd.get("callback_query")
+        if cb:
+            cb_user_id = cb.get("from", {}).get("id", 0)
+            if is_authorized(cb_user_id):
+                data_cb = cb.get("data", "")
+                chat_id = cb.get("message", {}).get("chat", {}).get("id")
+                if data_cb == "menu_kategori":
+                    cmd_kategori(chat_id, cb_user_id)
+                elif data_cb.startswith("kategori_"):
+                    cat_id = data_cb.split("_")[1]
+                    cat = get_accessible_category(cat_id, cb_user_id)
+                    if cat:
+                        label = "Pemasukan 💰" if cat["type"] == "I" else "Pengeluaran 💳"
+                        keyboard = {"inline_keyboard": []}
+                        if cat.get("user_id") != 0:
+                            keyboard["inline_keyboard"].append([{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"}])
+                        send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {escape_html(label)}\n\n<code>/editkat {escape_html(cat_id)} &lt;nama baru&gt;</code>", parse_mode="HTML", reply_markup=keyboard)
+                    else:
+                        send(chat_id, "❌ Kategori tidak ditemukan.")
+                elif data_cb.startswith("katdelok_"):
+                    cat_id = data_cb.split("_")[1]
+                    ok, err = delete_owned_category(cat_id, cb_user_id)
+                    send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
+        elif msg:
+            result = process(msg, upd["update_id"])
+            if result == "__STOP__":
+                offset_store.save(next_offset)
+                return "__STOP__"
+        offset_store.save(next_offset)
+        return next_offset
+    except Exception as exc:
+        log.exception("Unhandled update error update_id=%s", upd["update_id"])
+        return None
+
+
     err_count = 0
     while True:
         try:
@@ -231,45 +272,11 @@ def main():
             if not data.get("ok"):
                 continue
             for upd in data.get("result", []):
-                next_offset = upd["update_id"] + 1
-                try:
-                    msg = upd.get("message") or upd.get("edited_message")
-                    cb = upd.get("callback_query")
-                    if cb:
-                        cb_user_id = cb.get("from", {}).get("id", 0)
-                        if is_authorized(cb_user_id):
-                            data_cb = cb.get("data", "")
-                            chat_id = cb.get("message", {}).get("chat", {}).get("id")
-                            if data_cb == "menu_kategori":
-                                cmd_kategori(chat_id, cb_user_id)
-                            elif data_cb.startswith("kategori_"):
-                                cat_id = data_cb.split("_")[1]
-                                cat = get_accessible_category(cat_id, cb_user_id)
-                                if cat:
-                                    label = "Pemasukan 💰" if cat["type"] == "I" else "Pengeluaran 💳"
-                                    keyboard = {"inline_keyboard": []}
-                                    if cat.get("user_id") != 0:
-                                        keyboard["inline_keyboard"].append([{"text": "🗑 Hapus", "callback_data": f"katdelok_{cat_id}"}])
-                                    send(chat_id, f"📋 <b>{escape_html(cat.get('icon','📦'))} {escape_html(cat['name'])}</b>\nTipe: {escape_html(label)}\n\n<code>/editkat {escape_html(cat_id)} &lt;nama baru&gt;</code>", parse_mode="HTML", reply_markup=keyboard)
-                                else:
-                                    send(chat_id, "❌ Kategori tidak ditemukan.")
-                            elif data_cb.startswith("katdelok_"):
-                                cat_id = data_cb.split("_")[1]
-                                ok, err = delete_owned_category(cat_id, cb_user_id)
-                                send(chat_id, "✅ Dihapus." if ok else f"❌ {err}")
-                    elif msg:
-                        result = process(msg, upd["update_id"])
-                        if result == "__STOP__":
-                            log.info("Stop signal received")
-                            offset = next_offset
-                            offset_store.save(offset)
-                            return
-                    # Advance offset after successful processing
-                    offset = next_offset
-                    offset_store.save(offset)
-                except Exception as exc:
-                    log.exception("Unhandled update error update_id=%s", upd["update_id"])
-                    # Don't advance offset — retry on next poll
+                result = process_single_update(upd, offset_store)
+                if result == "__STOP__":
+                    return
+                if result is not None:
+                    offset = result
         except requests.RequestException as exc:
             err_count += 1
             log.error("Polling request failed attempt=%s error_type=%s", err_count, type(exc).__name__)
