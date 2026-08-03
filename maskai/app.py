@@ -272,7 +272,7 @@ def main():
                     # Don't advance offset — retry on next poll
         except requests.RequestException as exc:
             err_count += 1
-            log.error("Polling request error (%s/5): %s", err_count, exc)
+            log.error("Polling request failed attempt=%s error_type=%s", err_count, type(exc).__name__)
             if err_count >= 5:
                 log.critical("Polling failed %s times, stopping", err_count)
                 break

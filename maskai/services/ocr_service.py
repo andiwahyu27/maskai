@@ -56,7 +56,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, "❌ Gagal terhubung ke OCR.")
         return
     except requests.RequestException as exc:
-        log.error("OCR request failed: %s", exc)
+        log.error("OCR request failed error_type=%s", type(exc).__name__)
         send(chat_id, "❌ Layanan OCR sedang bermasalah.")
         return
 
@@ -74,7 +74,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     try:
         data = json.loads(re.sub(r"```json|```", "", content).strip())
     except (json.JSONDecodeError, ValueError):
-        log.error("OCR parse failed len=%s", len(content))
+        log.error("OCR parse failed length=%s", len(content))
         send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
 

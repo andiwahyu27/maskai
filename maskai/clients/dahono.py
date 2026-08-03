@@ -14,5 +14,5 @@ def claude(messages, max_tokens=500):
         body = r.json()
         return body["choices"][0]["message"]["content"]
     except (ValueError, KeyError, IndexError, requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
-        log.error(f"Claude error: {e}")
+        log.error("Claude error type=%s", type(e).__name__)
         return None

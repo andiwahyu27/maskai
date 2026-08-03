@@ -20,7 +20,7 @@ def api_get(url, **kw):
         r = requests.get(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API GET %s: %s", r.status_code, safe_body_for_log(r.text, 80))
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
+            return ApiResult(False, status=r.status_code, error=f"http_{r.status_code}")
         return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
     except requests.Timeout:
         log.error("API GET timeout: %s", safe_url_for_log(url))
@@ -29,11 +29,11 @@ def api_get(url, **kw):
         log.error("API GET connection error: %s", safe_url_for_log(url))
         return ApiResult(False, error="connection")
     except ValueError as e:
-        log.error(f"API GET invalid JSON: {e}")
+        log.error("API GET invalid JSON: %s", type(e).__name__)
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as exc:
         log.error("API GET request error: %s", exc)
-        return ApiResult(False, error=str(exc)[:200])
+        return ApiResult(False, error="request_exception")
 
 def api_post(url, json=None, data=None, **kw):
     """Safe POST with typed result"""
@@ -41,7 +41,7 @@ def api_post(url, json=None, data=None, **kw):
         r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API POST %s: %s", r.status_code, safe_body_for_log(r.text, 80))
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
+            return ApiResult(False, status=r.status_code, error=f"http_{r.status_code}")
         return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
     except requests.Timeout:
         log.error("API POST timeout: %s", safe_url_for_log(url))
@@ -50,11 +50,11 @@ def api_post(url, json=None, data=None, **kw):
         log.error("API POST connection error: %s", safe_url_for_log(url))
         return ApiResult(False, error="connection")
     except ValueError as e:
-        log.error(f"API POST invalid JSON: {e}")
+        log.error("API POST invalid JSON: %s", type(e).__name__)
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as exc:
         log.error("API POST request error: %s", exc)
-        return ApiResult(False, error=str(exc)[:200])
+        return ApiResult(False, error="request_exception")
 
 
 def api_patch(url, json=None, **kw):
@@ -63,7 +63,7 @@ def api_patch(url, json=None, **kw):
         r = requests.patch(url, json=json, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API PATCH %s: %s", r.status_code, safe_body_for_log(r.text, 80))
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
+            return ApiResult(False, status=r.status_code, error=f"http_{r.status_code}")
         # 204 has no body
         if r.status_code == 204:
             return ApiResult(True, status=204)
@@ -75,7 +75,7 @@ def api_patch(url, json=None, **kw):
     except ValueError:
         return ApiResult(False, error="invalid_json")
     except requests.RequestException as exc:
-        return ApiResult(False, error=str(exc)[:200])
+        return ApiResult(False, error="request_exception")
 
 def api_delete(url, **kw):
     """Safe DELETE with typed result"""
@@ -83,11 +83,11 @@ def api_delete(url, **kw):
         r = requests.delete(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
             log.warning("API DELETE %s: %s", r.status_code, safe_body_for_log(r.text, 80))
-            return ApiResult(False, status=r.status_code, error=r.text[:200])
+            return ApiResult(False, status=r.status_code, error=f"http_{r.status_code}")
         return ApiResult(True, status=r.status_code)
     except requests.Timeout:
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
         return ApiResult(False, error="connection")
     except requests.RequestException as exc:
-        return ApiResult(False, error=str(exc)[:200])
+        return ApiResult(False, error="request_exception")

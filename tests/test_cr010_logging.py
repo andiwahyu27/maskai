@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock, patch
 """CR-010 Logging, Redaction, and Safe Error Tests"""
 import unittest
 import logging
@@ -80,6 +81,48 @@ class TestUserSafeErrors(unittest.TestCase):
         for s in sends:
             self.assertNotIn("{e}", s)
             self.assertNotIn("{exc}", s)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestApiResultErrors(unittest.TestCase):
+    @patch('maskai.clients.http.requests.get')
+    def test_api_result_error_is_category_not_body(self, mock_get):
+        """ApiResult.error must be category, not raw body"""
+        from maskai.clients.http import api_get
+        mock_r = MagicMock()
+        mock_r.status_code = 500
+        mock_r.text = "Internal Server Error with stacktrace and secrets"
+        mock_get.return_value = mock_r
+        result = api_get("https://example.test")
+        self.assertEqual(result.error, "http_500")
+        self.assertNotIn("stacktrace", result.error or "")
+        self.assertNotIn("secrets", result.error or "")
+
+    @patch('maskai.clients.http.requests.post')
+    def test_api_result_timeout_is_category(self, mock_post):
+        """ApiResult timeout error is category, not raw exception"""
+        from maskai.clients.http import api_post
+        import requests
+        mock_post.side_effect = requests.Timeout()
+        result = api_post("https://example.test")
+        self.assertIsNotNone(result.error)
+        self.assertNotIn("https://", result.error or "")
+
+
+class TestTransactionLogging(unittest.TestCase):
+    def test_duplicate_transaction_is_info_not_error(self):
+        """Duplicate must be INFO log, not ERROR"""
+        logger = logging.getLogger("test_duplicate")
+        with self.assertLogs(logger, level='INFO') as cm:
+            logger.info(
+                "Duplicate Telegram update — treating as successful no-op",
+            )
+        output = "\n".join(cm.output)
+        self.assertIn("INFO", output)
+        self.assertNotIn("ERROR", output)
 
 
 if __name__ == "__main__":
