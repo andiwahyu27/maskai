@@ -6,6 +6,7 @@ from maskai.clients.telegram import send, tg
 from maskai.clients.supabase import supabase_get, supabase_post
 from maskai.utils.validation import parse_positive_amount
 from maskai.utils.html import escape_html
+from maskai.utils.logging_utils import safe_body_for_log
 
 log = logging.getLogger("maskai.services.ocr")
 
@@ -43,7 +44,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
             headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"}, timeout=config.HTTP_TIMEOUT_LONG)
         if r.status_code != 200 or not r.text:
-            log.error(f"OCR error {r.status_code}: {r.text[:200] if r.text else 'empty'}")
+            log.error("OCR error status=%s body=%s", r.status_code, safe_body_for_log(r.text, 80))
             send(chat_id, "❌ Gagal membaca struk.")
             return
     except requests.Timeout:
@@ -62,7 +63,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     try:
         content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     except (ValueError, KeyError, IndexError, TypeError):
-        log.error(f"OCR invalid response: {r.text[:200]}")
+        log.error("OCR invalid response: %s", safe_body_for_log(r.text, 80))
         send(chat_id, "❌ Format hasil OCR tidak valid.")
         return
 
@@ -73,13 +74,13 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     try:
         data = json.loads(re.sub(r"```json|```", "", content).strip())
     except (json.JSONDecodeError, ValueError):
-        log.error(f"OCR parse: {content[:200]}")
+        log.error("OCR parse failed len=%s", len(content))
         send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
 
     # Validate OCR response is a dict
     if not isinstance(data, dict):
-        log.error(f"OCR response not dict: {type(data).__name__}")
+        log.error("OCR response not dict: %s", type(data).__name__)
         send(chat_id, "❌ Format hasil OCR tidak valid.")
         return
 

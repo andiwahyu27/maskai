@@ -134,8 +134,8 @@ def _cmd_sync(chat_id, user_id):
             ])
         send(chat_id, f"✅ Sinkronisasi selesai. {len(txs)} baris ke Google Sheets.")
     except Exception as e:
-        log.error(f"Sync error: {e}")
-        send(chat_id, f"❌ Gagal sinkronisasi: {e}")
+        log.exception("Google Sheets sync failed user_id=%s", user_id)
+        send(chat_id, "❌ Sinkronisasi gagal. Silakan coba lagi.")
 
 def _cmd_resetdb(chat_id, user_id):
     if not is_authorized(user_id):
@@ -268,7 +268,7 @@ def main():
                     offset = next_offset
                     offset_store.save(offset)
                 except Exception as exc:
-                    log.error("Update processing error (%s): %s", upd["update_id"], exc)
+                    log.exception("Unhandled update error update_id=%s", upd["update_id"])
                     # Don't advance offset — retry on next poll
         except requests.RequestException as exc:
             err_count += 1

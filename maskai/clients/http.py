@@ -3,6 +3,7 @@ import logging, requests
 from dataclasses import dataclass
 from typing import Any, Optional
 from maskai.config import config
+from maskai.utils.logging_utils import safe_url_for_log, safe_body_for_log
 BOT_TOKEN = config.BOT_TOKEN
 log = logging.getLogger("maskai.http")
 @dataclass
@@ -18,14 +19,14 @@ def api_get(url, **kw):
     try:
         r = requests.get(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API GET %s: %s", r.status_code, r.text[:100])
+            log.warning("API GET %s: %s", r.status_code, safe_body_for_log(r.text, 80))
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         return ApiResult(True, data=r.json() if r.text else None, status=r.status_code)
     except requests.Timeout:
-        log.error("API GET timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
+        log.error("API GET timeout: %s", safe_url_for_log(url))
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
-        log.error("API GET connection error: %s", url.replace(BOT_TOKEN, "***")[:80])
+        log.error("API GET connection error: %s", safe_url_for_log(url))
         return ApiResult(False, error="connection")
     except ValueError as e:
         log.error(f"API GET invalid JSON: {e}")
@@ -39,14 +40,14 @@ def api_post(url, json=None, data=None, **kw):
     try:
         r = requests.post(url, json=json, data=data, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API POST %s: %s", r.status_code, r.text[:100])
+            log.warning("API POST %s: %s", r.status_code, safe_body_for_log(r.text, 80))
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         return ApiResult(True, data=r.json() if r.text else {}, status=r.status_code)
     except requests.Timeout:
-        log.error("API POST timeout: %s", url.replace(BOT_TOKEN, "***")[:80])
+        log.error("API POST timeout: %s", safe_url_for_log(url))
         return ApiResult(False, error="timeout")
     except requests.ConnectionError:
-        log.error("API POST connection error: %s", url.replace(BOT_TOKEN, "***")[:80])
+        log.error("API POST connection error: %s", safe_url_for_log(url))
         return ApiResult(False, error="connection")
     except ValueError as e:
         log.error(f"API POST invalid JSON: {e}")
@@ -61,7 +62,7 @@ def api_patch(url, json=None, **kw):
     try:
         r = requests.patch(url, json=json, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API PATCH %s: %s", r.status_code, r.text[:100])
+            log.warning("API PATCH %s: %s", r.status_code, safe_body_for_log(r.text, 80))
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         # 204 has no body
         if r.status_code == 204:
@@ -81,7 +82,7 @@ def api_delete(url, **kw):
     try:
         r = requests.delete(url, timeout=kw.pop("timeout", config.HTTP_TIMEOUT), **kw)
         if r.status_code < 200 or r.status_code >= 300:
-            log.warning("API DELETE %s: %s", r.status_code, r.text[:100])
+            log.warning("API DELETE %s: %s", r.status_code, safe_body_for_log(r.text, 80))
             return ApiResult(False, status=r.status_code, error=r.text[:200])
         return ApiResult(True, status=r.status_code)
     except requests.Timeout:
