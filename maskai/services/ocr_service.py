@@ -173,6 +173,7 @@ def _parse_tesseract_fallback(raw_text):
     date_match = re.search(r'(\d{2,4}[-/]\d{1,2}[-/]\d{1,2})', raw_text)
     result = {"toko": "Struk", "items": "-", "tanggal": date_match.group(1) if date_match else "?"}
     if total_match:
-        result["total"] = int(total_match.group(1).replace(",", "").replace(".", ""))
+        result["total"] = str(int(total_match.group(1).replace(",", "").replace(".", "")))
+        log.info("Fallback OCR result: %s", result)
         return json.dumps(result)
     return None
