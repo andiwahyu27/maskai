@@ -1,11 +1,13 @@
-"""MASKAI — Centralized Configuration"""
+"""MASKAI — Centralized Configuration (V2-CONF-001: fail-fast)"""
 import os, sys
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
+VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
 @dataclass(frozen=True)
 class Config:
-    """All configuration from environment"""
+    """All configuration from environment — validated at creation"""
     BOT_TOKEN: str
     SUPABASE_URL: str
     SUPABASE_KEY: str
@@ -26,13 +28,25 @@ class Config:
     ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
 
     def __post_init__(self):
+        # Validate mandatory
         missing = [k for k in ("BOT_TOKEN","SUPABASE_URL","SUPABASE_KEY","DAHONO_KEY") if not getattr(self,k)]
         if missing:
-            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+            raise RuntimeError(f"Missing required environment variable: {missing[0]}")
+        # Validate LOG_LEVEL
+        if self.LOG_LEVEL not in VALID_LOG_LEVELS:
+            object.__setattr__(self, 'LOG_LEVEL', 'INFO')
+        # Validate OCR_MAX_IMAGE_BYTES
+        if self.OCR_MAX_IMAGE_BYTES <= 0:
+            raise RuntimeError(f"Invalid OCR_MAX_IMAGE_BYTES: must be positive")
+
 
 def from_env():
     tz_str = os.environ.get("TZ", "Asia/Jakarta")
     token = os.environ.get("BOT_TOKEN", "")
+    try:
+        ocr_max = int(os.environ.get("OCR_MAX_IMAGE_BYTES", str(8*1024*1024)))
+    except (ValueError, TypeError):
+        raise RuntimeError("Invalid OCR_MAX_IMAGE_BYTES: must be an integer")
     return Config(
         BOT_TOKEN=token,
         SUPABASE_URL=os.environ.get("SUPABASE_URL", ""),
@@ -41,25 +55,28 @@ def from_env():
         TELEGRAM_API=f"https://api.telegram.org/bot{token}",
         SUPABASE_HEADERS={"apikey": os.environ.get("SUPABASE_KEY",""), "Authorization": f"Bearer {os.environ.get('SUPABASE_KEY','')}", "Content-Type": "application/json"},
         TZ=ZoneInfo(tz_str),
-        LOG_LEVEL=os.environ.get("LOG_LEVEL","INFO"),
+        LOG_LEVEL=os.environ.get("LOG_LEVEL","INFO").upper(),
         OFFSET_FILE=os.environ.get("MASKAI_OFFSET_FILE","/var/lib/maskai-bot/offset.txt"),
-        OCR_MAX_IMAGE_BYTES=int(os.environ.get("OCR_MAX_IMAGE_BYTES", str(8*1024*1024))),
+        OCR_MAX_IMAGE_BYTES=ocr_max,
         GOOGLE_CREDS_FILE=os.environ.get("GOOGLE_CREDS_FILE",""),
         GOOGLE_SHEET_ID=os.environ.get("GOOGLE_SHEET_ID",""),
     )
 
+
 _config = None
 def get_config():
+    """Return singleton config. Fails fast in production. Tests must set env vars."""
     global _config
     if _config is None:
-        try:
-            _config = from_env()
-        except RuntimeError as e:
-            if __name__ == "__main__":
-                print(f"FATAL: {e}", file=sys.stderr)
-                sys.exit(1)
-            _config = Config(BOT_TOKEN="test", SUPABASE_URL="test", SUPABASE_KEY="test", DAHONO_KEY="test")
+        _config = from_env()
     return _config
+
+
+def reset_config_for_tests():
+    """Clear config cache so tests can re-create with different env"""
+    global _config
+    _config = None
+
 
 config = get_config()
 # Backward compat aliases

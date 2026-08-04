@@ -1,4 +1,12 @@
-"""CR-012: Block real HTTP in tests"""
+"""CR-012: Block real HTTP + set test env vars (pre-import)"""
+import os
+
+# Set test env vars BEFORE any module imports config
+os.environ.setdefault("BOT_TOKEN", "test-bot-token-for-tests")
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_KEY", "test-supabase-key-for-tests")
+os.environ.setdefault("DAHONO_KEY", "test-dahono-key-for-tests")
+
 import pytest
 
 
