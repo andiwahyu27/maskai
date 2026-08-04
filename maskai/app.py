@@ -17,6 +17,7 @@ signal.signal(signal.SIGTERM, _on_shutdown)
 # ── Modular imports ──
 from maskai.config import config, SUPABASE_URL, SUPABASE_KEY, BOT_TOKEN, DAHONO_KEY
 from maskai.config import DAHONO_URL, TELEGRAM_API, SUPABASE_HEADERS, TZ, ADMIN_IDS
+ALLOWED_USERS = config.ALLOWED_USERS
 from maskai.utils.html import escape_html
 from maskai.utils.offset_store import OffsetStore
 from maskai.clients.telegram import send
@@ -38,6 +39,9 @@ BOT_START_TIME = time_module.time()
 
 # ── Auth ──
 def is_authorized(user_id):
+    return user_id in ADMIN_IDS or user_id in ALLOWED_USERS
+
+def is_admin(user_id):
     return user_id in ADMIN_IDS
 
 def log_security(action, user_id, detail=""):
@@ -99,11 +103,19 @@ def process(msg, update_id=None):
     elif cmd in ("/usage", "/cekdb"):
         cmd_usage(chat_id)
     elif cmd == "/sync":
+        if not is_admin(user_id):
+            send(chat_id, "❌ Khusus admin.")
+            return
         _cmd_sync(chat_id, user_id)
     elif cmd == "/resetdb":
+        if not is_admin(user_id):
+            send(chat_id, "❌ Khusus admin.")
+            return
         _cmd_resetdb(chat_id, user_id)
     elif cmd == "/stop":
-        if user_id in ADMIN_IDS:
+        if not is_admin(user_id):
+            send(chat_id, "❌ Khusus admin.")
+            return
             return "__STOP__"
     elif text:
         # Check pending state first

@@ -26,6 +26,7 @@ class Config:
     GOOGLE_CREDS_FILE: str = ""
     GOOGLE_SHEET_ID: str = ""
     ADMIN_IDS: list = field(default_factory=lambda: [1367356347])
+    ALLOWED_USERS: list = field(default_factory=lambda: [8860412669])
 
     def __post_init__(self):
         # Validate mandatory
