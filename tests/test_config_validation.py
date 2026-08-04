@@ -76,13 +76,15 @@ class TestConfigFailFast(unittest.TestCase):
             from_env()
 
     def test_singleton_returns_same_instance(self):
+        """get_config() returns same instance (env already set by conftest)"""
         from maskai.config import get_config, reset_config_for_tests
-        reset_config_for_tests()
         import os
+        # Env already set by conftest — just verify singleton
         os.environ["BOT_TOKEN"] = "t"
         os.environ["SUPABASE_URL"] = "u"
         os.environ["SUPABASE_KEY"] = "k"
         os.environ["DAHONO_KEY"] = "d"
+        reset_config_for_tests()
         c1 = get_config()
         c2 = get_config()
         self.assertIs(c1, c2)
