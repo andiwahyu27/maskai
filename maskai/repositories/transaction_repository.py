@@ -47,6 +47,7 @@ def create_transaction(*, user_id: int, update_id: Optional[int],
             "source": source,
         })
         full_payload["metadata"] = metadata
+        full_payload["telegram_update_id"] = update_id  # typed column for unique index
 
     result = supabase_post("maskai_transactions", full_payload)
 
