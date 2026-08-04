@@ -3,6 +3,17 @@ import os, sys, json, logging, time as time_module
 from datetime import datetime
 import requests
 
+# ── Graceful shutdown ──
+_shutdown = threading.Event()
+
+def _on_shutdown(signum, frame):
+    log = logging.getLogger("maskai")
+    log.info("Shutdown requested signal=%s", signum)
+    _shutdown.set()
+
+signal.signal(signal.SIGINT, _on_shutdown)
+signal.signal(signal.SIGTERM, _on_shutdown)
+
 # ── Modular imports ──
 from maskai.config import config, SUPABASE_URL, SUPABASE_KEY, BOT_TOKEN, DAHONO_KEY
 from maskai.config import DAHONO_URL, TELEGRAM_API, SUPABASE_HEADERS, TZ, ADMIN_IDS
@@ -255,54 +266,57 @@ def main():
     offset = offset_store.load()
     err_count = 0
     backoff = 1
-    while True:
-        try:
-            r = requests.get(f"{TELEGRAM_API}/getUpdates",
-                params={"offset": offset, "timeout": 30}, timeout=config.POLL_TIMEOUT)
-            if r.status_code == 401:
-                log.critical("Telegram 401 Unauthorized — wrong BOT_TOKEN, exiting")
-                break
-            if r.status_code == 429:
-                retry_after = int(r.headers.get("Retry-After", backoff))
-                log.warning("Telegram 429 rate limited, waiting %ss", retry_after)
-                time_module.sleep(retry_after)
-                backoff = min(backoff * 2, 60)
-                continue
-            if r.status_code < 200 or r.status_code >= 300:
+    try:
+        while not _shutdown.is_set():
+            try:
+                r = requests.get(f"{TELEGRAM_API}/getUpdates",
+                    params={"offset": offset, "timeout": 30}, timeout=config.POLL_TIMEOUT)
+                if r.status_code == 401:
+                    log.critical("Telegram 401 Unauthorized — wrong BOT_TOKEN, exiting")
+                    break
+                if r.status_code == 429:
+                    retry_after = int(r.headers.get("Retry-After", backoff))
+                    log.warning("Telegram 429 rate limited, waiting %ss", retry_after)
+                    time_module.sleep(retry_after)
+                    backoff = min(backoff * 2, 60)
+                    continue
+                if r.status_code < 200 or r.status_code >= 300:
+                    err_count += 1
+                    log.warning("getUpdates %s (%s/5) backoff=%ss", r.status_code, err_count, backoff)
+                    if err_count >= 5:
+                        log.critical("Too many errors, stopping")
+                        break
+                    time_module.sleep(backoff)
+                    backoff = min(backoff * 2, 60)
+                    continue
+                err_count = 0
+                backoff = 1
+                data = r.json()
+                if not data.get("ok"):
+                    continue
+                for upd in data.get("result", []):
+                    result = process_single_update(upd, offset_store)
+                    if result == "__STOP__":
+                        return
+                    if result is not None:
+                        offset = result
+            except requests.RequestException as exc:
                 err_count += 1
-                log.warning("getUpdates %s (%s/5) backoff=%ss", r.status_code, err_count, backoff)
+                log.error("Polling request failed attempt=%s error_type=%s backoff=%ss", err_count, type(exc).__name__, backoff)
                 if err_count >= 5:
-                    log.critical("Too many errors, stopping")
+                    log.critical("Polling failed %s times, stopping", err_count)
                     break
                 time_module.sleep(backoff)
                 backoff = min(backoff * 2, 60)
-                continue
-            err_count = 0
-            backoff = 1
-            data = r.json()
-            if not data.get("ok"):
-                continue
-            for upd in data.get("result", []):
-                result = process_single_update(upd, offset_store)
-                if result == "__STOP__":
-                    return
-                if result is not None:
-                    offset = result
-        except requests.RequestException as exc:
-            err_count += 1
-            log.error("Polling request failed attempt=%s error_type=%s backoff=%ss", err_count, type(exc).__name__, backoff)
-            if err_count >= 5:
-                log.critical("Polling failed %s times, stopping", err_count)
-                break
-            time_module.sleep(backoff)
-            backoff = min(backoff * 2, 60)
-        except (ValueError, OSError) as exc:
-            err_count += 1
-            log.error("Loop failed attempt=%s error_type=%s", err_count, type(exc).__name__)
-            if err_count >= 5:
-                break
-            time_module.sleep(config.HTTP_TIMEOUT_SHORT)
+            except (ValueError, OSError) as exc:
+                err_count += 1
+                log.error("Loop failed attempt=%s error_type=%s", err_count, type(exc).__name__)
+                if err_count >= 5:
+                    break
+                time_module.sleep(config.HTTP_TIMEOUT_SHORT)
+    finally:
         offset_store.save(offset)
+        log.info("MASKAI stopped gracefully")
 
 if __name__ == "__main__":
     main()
