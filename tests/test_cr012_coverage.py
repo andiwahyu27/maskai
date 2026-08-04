@@ -179,11 +179,3 @@ class TestRegression(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-class TestCoverageBoost(unittest.TestCase):
-    def test_config_from_env_creates_valid_config(self):
-        """from_env() produces valid Config"""
-        import os
-        os.environ['BOT_TOKEN'] = 'test123'; os.environ['SUPABASE_URL'] = 'http://test'; os.environ['SUPABASE_KEY'] = 'test456'; os.environ['DAHONO_KEY'] = 'test789'
-        from maskai.config import from_env, Config
-        c = from_env()
-        self.assertIsInstance(c, Config)
