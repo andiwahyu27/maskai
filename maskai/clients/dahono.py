@@ -1,15 +1,31 @@
-"""MASKAI — AI client (OpenCode Go)"""
+"""MASKAI — AI client (OpenCode Go Responses API)"""
 import logging
 import requests
 
 log = logging.getLogger("maskai.ai")
 
 
+def _extract_response_text(body):
+    """Extract text from OpenCode Responses API response. Returns str or None."""
+    # output_text field
+    if isinstance(body.get("output_text"), str) and body["output_text"].strip():
+        return body["output_text"]
+    # output[].content[].text
+    output = body.get("output", [])
+    if isinstance(output, list):
+        for item in output:
+            content = item.get("content", [])
+            if isinstance(content, list):
+                for c in content:
+                    if isinstance(c.get("text"), str) and c["text"].strip():
+                        return c["text"]
+    return None
+
+
 def claude(messages, max_tokens=500):
-    """AI text via OpenCode Go — works reliably"""
+    """AI text via OpenCode Go Responses API"""
     import os
     oc_key = None
-    # Read from env
     for path in ["/home/ubuntu/maskai/.env", os.path.expanduser("~/.hermes/.env")]:
         try:
             with open(path) as f:
@@ -25,13 +41,24 @@ def claude(messages, max_tokens=500):
         log.error("No OpenCode API key found")
         return None
 
+    # Convert ChatCompletions-style messages to Responses API input
+    input_items = []
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        input_items.append({
+            "role": role,
+            "content": content,
+        })
+
     try:
         r = requests.post(
-            "https://opencode.ai/zen/go/v1/chat/completions",
+            "https://opencode.ai/zen/go/v1/responses",
             json={
                 "model": "gpt-5.6-luna",
-                "messages": messages,
-                "max_tokens": max_tokens,
+                "input": input_items,
+                "max_output_tokens": max_tokens,
+                "store": False,
             },
             headers={
                 "Authorization": f"Bearer {oc_key}",
@@ -59,14 +86,10 @@ def claude(messages, max_tokens=500):
         log.error("AI invalid JSON")
         return None
 
-    try:
-        content = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        log.error("AI malformed response")
+    text = _extract_response_text(body)
+    if not text:
+        log.error("AI empty response")
         return None
 
-    if not isinstance(content, str) or not content.strip():
-        log.error("AI empty content")
-        return None
-
-    return content
+    log.info("OpenCode response received length=%s", len(text))
+    return text

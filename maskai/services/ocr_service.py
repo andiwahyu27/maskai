@@ -3,7 +3,7 @@ import json, logging, re, os, subprocess, tempfile
 from datetime import datetime
 import requests
 
-from maskai.config import config, DAHONO_URL, DAHONO_KEY, TZ, BOT_TOKEN
+from maskai.config import config, TZ
 from maskai.clients.telegram import send, tg
 from maskai.clients.supabase import supabase_get, supabase_post
 from maskai.utils.validation import parse_positive_amount
@@ -12,6 +12,43 @@ from maskai.utils.html import escape_html
 log = logging.getLogger("maskai.services.ocr")
 
 ALLOWED_OCR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "application/octet-stream"}
+
+def extract_json_object(text):
+    """Robust JSON extraction from AI response. Returns dict or None."""
+    if not text:
+        return None
+    # Strip markdown code fences
+    cleaned = re.sub(r'```(?:json)?\s*', '', text)
+    cleaned = cleaned.replace('```', '').strip()
+    # Try direct parse
+    try:
+        obj = json.loads(cleaned)
+        if isinstance(obj, dict):
+            return obj
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Try raw_decode to find first JSON object
+    try:
+        decoder = json.JSONDecoder()
+        obj, _ = decoder.raw_decode(cleaned)
+        if isinstance(obj, dict):
+            return obj
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Try to find { ... } boundaries
+    start = cleaned.find('{')
+    if start >= 0:
+        end = cleaned.rfind('}')
+        if end > start:
+            try:
+                obj = json.loads(cleaned[start:end+1])
+                if isinstance(obj, dict):
+                    return obj
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return None
+
+
 
 
 def _get_fallback_category(user_id, tx_type):
@@ -119,22 +156,17 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
             send(chat_id, "❌ Struk tidak dapat dibaca.")
             return
 
-    try:
-        data = json.loads(re.sub(r"```json|```", "", content).strip())
-    except (json.JSONDecodeError, ValueError):
-        log.error("Claude parse failed length=%s", len(content))
-        send(chat_id, "❌ Struk tidak dapat dibaca.")
-        return
-    if not isinstance(data, dict):
-        log.error("Claude response not dict: %s", type(data).__name__)
-        send(chat_id, "❌ Format hasil OCR tidak valid.")
-        return
-    if not content:
-        send(chat_id, "❌ Struk tidak dapat dibaca.")
-        return
 
-    if data.get("error"):
-        send(chat_id, "❌ Struk tidak jelas. Coba foto ulang.")
+    data = extract_json_object(content)
+    if not data:
+        data = _parse_tesseract_fallback(raw_text)
+        if data and isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, ValueError):
+                data = None
+    if not data:
+        send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
 
     total, err = parse_positive_amount(data.get("total"))
@@ -175,5 +207,5 @@ def _parse_tesseract_fallback(raw_text):
     if total_match:
         result["total"] = str(int(total_match.group(1).replace(",", "").replace(".", "")))
         log.info("Fallback OCR result: %s", result)
-        return json.dumps(result)
+        return result
     return None
