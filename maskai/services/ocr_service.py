@@ -11,7 +11,7 @@ from maskai.utils.html import escape_html
 
 log = logging.getLogger("maskai.services.ocr")
 
-ALLOWED_OCR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_OCR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "application/octet-stream"}
 
 
 def _get_fallback_category(user_id, tx_type):
