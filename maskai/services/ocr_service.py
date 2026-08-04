@@ -92,7 +92,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         image_bytes = None
 
     payload = {
-        "model": "dahono/gpt-5.5",
+        "model": "dahono/gpt-5.6-luna",
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": "Extract from this receipt/store invoice. Return ONLY valid JSON, no other text:\n{\"toko\": \"store name\", \"total\": 12345, \"items\": \"item list\", \"tanggal\": \"YYYY-MM-DD\"}\nIf unreadable: {\"error\": true}"},
             {"type": "image_url", "image_url": {"url": image_data_url}}
