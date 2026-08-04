@@ -1,5 +1,5 @@
 """MASKAI — OCR service (V2-SEC-001: secure image transfer)"""
-import json, logging, re, base64
+import json, logging, re, os, subprocess, tempfile
 from datetime import datetime
 import requests
 
@@ -86,60 +86,51 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
 
     log.info("OCR image prepared mime_type=%s size_bytes=%s", content_type, len(image_bytes))
 
-
-    payload = {
-        "model": "dahono/gpt-5.5",
-        "messages": [{"role": "user", "content": [
-            {"type": "text", "text": "Extract from this receipt/store invoice. Return ONLY valid JSON, no other text:\n{\"toko\": \"store name\", \"total\": 12345, \"items\": \"item list\", \"tanggal\": \"YYYY-MM-DD\"}\nIf unreadable: {\"error\": true}"},
-            {"type": "image_url", "image_url": {"url": f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{path}"}}
-        ]}],
-        "max_tokens": 300
-    }
-
+    # Tesseract OCR — local, no API call needed
+    import subprocess, tempfile
     try:
-        r = requests.post(f"{DAHONO_URL}/chat/completions", json=payload,
-            headers={"Authorization": f"Bearer {DAHONO_KEY}", "Content-Type": "application/json"},
-            timeout=config.HTTP_TIMEOUT_LONG)
-        if r.status_code != 200 or not r.text:
-            log.error("OCR HTTP failure status=%s", r.status_code)
-            send(chat_id, "❌ Gagal membaca struk.")
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+            tf.write(image_bytes)
+            tmp_path = tf.name
+        result = subprocess.run(["tesseract", tmp_path, "stdout", "-l", "eng+ind"],
+            capture_output=True, text=True, timeout=30)
+        os.unlink(tmp_path)
+        raw_text = result.stdout.strip()
+        if not raw_text:
+            log.error("Tesseract returned empty")
+            send(chat_id, "❌ Struk tidak dapat dibaca.")
             return
-    except requests.Timeout:
-        log.error("OCR timeout")
-        send(chat_id, "❌ Layanan OCR sedang bermasalah.")
-        return
-    except requests.ConnectionError:
-        log.error("OCR connection error")
-        send(chat_id, "❌ Layanan OCR sedang bermasalah.")
-        return
-    except requests.RequestException as exc:
-        log.error("OCR request failed error_type=%s", type(exc).__name__)
-        send(chat_id, "❌ Layanan OCR sedang bermasalah.")
+        log.info("Tesseract OCR: %s chars", len(raw_text))
+    except (subprocess.TimeoutExpired, OSError) as e:
+        log.error("Tesseract failed error_type=%s", type(e).__name__)
+        send(chat_id, "❌ Gagal membaca struk.")
         return
     finally:
-        image_data_url = None
+        image_bytes = None
 
-    try:
-        content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    except (ValueError, KeyError, IndexError, TypeError):
-        log.error("OCR invalid JSON status=%s", r.status_code)
-        send(chat_id, "❌ Format hasil OCR tidak valid.")
-        return
-
+    # Parse with Claude text model
+    from maskai.clients.dahono import claude
+    prompt = f"Extract from this receipt OCR text. Return ONLY valid JSON:\n{{\"toko\": \"store name\", \"total\": 12345, \"items\": \"item list\", \"tanggal\": \"YYYY-MM-DD\"}}\nIf unreadable: {{\"error\": true}}\n\nOCR Text:\n{raw_text[:2000]}"
+    content = claude([{"role": "user", "content": prompt}], max_tokens=200)
     if not content:
-        send(chat_id, "❌ Struk tidak dapat dibaca.")
-        return
+        # Fallback: try simple regex parsing
+        content = _parse_tesseract_fallback(raw_text)
+        if not content:
+            send(chat_id, "❌ Struk tidak dapat dibaca.")
+            return
 
     try:
         data = json.loads(re.sub(r"```json|```", "", content).strip())
     except (json.JSONDecodeError, ValueError):
-        log.error("OCR parse failed length=%s", len(content))
+        log.error("Claude parse failed length=%s", len(content))
         send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
-
     if not isinstance(data, dict):
-        log.error("OCR response not dict: %s", type(data).__name__)
+        log.error("Claude response not dict: %s", type(data).__name__)
         send(chat_id, "❌ Format hasil OCR tidak valid.")
+        return
+    if not content:
+        send(chat_id, "❌ Struk tidak dapat dibaca.")
         return
 
     if data.get("error"):
@@ -172,3 +163,15 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
         send(chat_id, "❌ Gagal menyimpan transaksi.")
+
+
+def _parse_tesseract_fallback(raw_text):
+    """Simple regex fallback when Claude is unavailable"""
+    import re
+    total_match = re.search(r'(?:total|jumlah|amount|sum)[^\d]*(\d[\d,.]+)', raw_text.lower())
+    date_match = re.search(r'(\d{2,4}[-/]\d{1,2}[-/]\d{1,2})', raw_text)
+    result = {"toko": "Struk", "items": "-", "tanggal": date_match.group(1) if date_match else "?"}
+    if total_match:
+        result["total"] = int(total_match.group(1).replace(",", "").replace(".", ""))
+        return json.dumps(result)
+    return None
