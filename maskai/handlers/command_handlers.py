@@ -56,7 +56,8 @@ def cmd_laporan(chat_id, user_id, text):
     parts = text.strip().split()
     now = datetime.now(TZ)
 
-    if len(parts) == 3:  # date range
+    if len(parts) == 3 and not any(kw in text.lower() for kw in ("hari ini", "minggu ini", "bulan ini", "bulan lalu")):
+        # explicit date range
         try:
             d1, d2 = parts[1], parts[2]
             start_dt, end_dt = build_jakarta_date_range(d1, d2)
