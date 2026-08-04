@@ -254,19 +254,31 @@ def main():
     offset_store = OffsetStore(config.OFFSET_FILE)
     offset = offset_store.load()
     err_count = 0
+    backoff = 1
     while True:
         try:
             r = requests.get(f"{TELEGRAM_API}/getUpdates",
                 params={"offset": offset, "timeout": 30}, timeout=config.POLL_TIMEOUT)
+            if r.status_code == 401:
+                log.critical("Telegram 401 Unauthorized — wrong BOT_TOKEN, exiting")
+                break
+            if r.status_code == 429:
+                retry_after = int(r.headers.get("Retry-After", backoff))
+                log.warning("Telegram 429 rate limited, waiting %ss", retry_after)
+                time_module.sleep(retry_after)
+                backoff = min(backoff * 2, 60)
+                continue
             if r.status_code < 200 or r.status_code >= 300:
                 err_count += 1
-                log.warning(f"getUpdates {r.status_code} ({err_count}/5)")
+                log.warning("getUpdates %s (%s/5) backoff=%ss", r.status_code, err_count, backoff)
                 if err_count >= 5:
                     log.critical("Too many errors, stopping")
                     break
-                time_module.sleep(config.HTTP_TIMEOUT_SHORT)
+                time_module.sleep(backoff)
+                backoff = min(backoff * 2, 60)
                 continue
             err_count = 0
+            backoff = 1
             data = r.json()
             if not data.get("ok"):
                 continue
@@ -278,11 +290,12 @@ def main():
                     offset = result
         except requests.RequestException as exc:
             err_count += 1
-            log.error("Polling request failed attempt=%s error_type=%s", err_count, type(exc).__name__)
+            log.error("Polling request failed attempt=%s error_type=%s backoff=%ss", err_count, type(exc).__name__, backoff)
             if err_count >= 5:
                 log.critical("Polling failed %s times, stopping", err_count)
                 break
-            time_module.sleep(config.HTTP_TIMEOUT_SHORT)
+            time_module.sleep(backoff)
+            backoff = min(backoff * 2, 60)
         except (ValueError, OSError) as exc:
             err_count += 1
             log.error("Loop failed attempt=%s error_type=%s", err_count, type(exc).__name__)
