@@ -88,7 +88,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
 
 
     payload = {
-        "model": "dahono/gpt-5.6-luna",
+        "model": "dahono/gpt-5.5",
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": "Extract from this receipt/store invoice. Return ONLY valid JSON, no other text:\n{\"toko\": \"store name\", \"total\": 12345, \"items\": \"item list\", \"tanggal\": \"YYYY-MM-DD\"}\nIf unreadable: {\"error\": true}"},
             {"type": "image_url", "image_url": {"url": f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{path}"}}
