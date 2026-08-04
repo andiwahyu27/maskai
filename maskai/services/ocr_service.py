@@ -86,16 +86,12 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
 
     log.info("OCR image prepared mime_type=%s size_bytes=%s", content_type, len(image_bytes))
 
-    try:
-        image_data_url = _encode_as_data_url(image_bytes, content_type)
-    finally:
-        image_bytes = None
 
     payload = {
         "model": "dahono/gpt-5.6-luna",
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": "Extract from this receipt/store invoice. Return ONLY valid JSON, no other text:\n{\"toko\": \"store name\", \"total\": 12345, \"items\": \"item list\", \"tanggal\": \"YYYY-MM-DD\"}\nIf unreadable: {\"error\": true}"},
-            {"type": "image_url", "image_url": {"url": image_data_url}}
+            {"type": "image_url", "image_url": {"url": f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{path}"}}
         ]}],
         "max_tokens": 300
     }
