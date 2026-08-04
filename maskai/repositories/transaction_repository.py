@@ -67,7 +67,7 @@ def create_transaction(*, user_id: int, update_id: Optional[int],
             r = supabase_get("maskai_transactions", {
                 "user_id": f"eq.{user_id}",
                 "metadata->>telegram_update_id": f"eq.{update_id}",
-                "select": "*",
+                "select": "id,type,amount,description,transaction_dt,category_id,metadata",
                 "limit": "1",
             })
             rows = r.data if r.ok and isinstance(r.data, list) else []
