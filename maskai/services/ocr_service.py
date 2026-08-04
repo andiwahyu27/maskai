@@ -11,7 +11,7 @@ from maskai.utils.html import escape_html
 
 log = logging.getLogger("maskai.services.ocr")
 
-ALLOWED_OCR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_OCR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "application/octet-stream"}
 
 SUFFIX_BY_MIME = {
     "image/jpeg": ".jpg",
@@ -206,15 +206,17 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
         return
 
     from maskai.repositories.transaction_repository import create_transaction, CreateTransactionStatus
+    tx_payload = {
+        "user_id": user_id, "type": "E", "amount": format(total, "f"),
+        "category_id": fallback_cat,
+        "description": f"{data.get('items', '-')} ({data.get('toko', 'Struk')})",
+        "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")),
+        "currency": "IDR",
+    }
+    log.info("OCR tx payload: cat=%s amt=%s dt=%s", tx_payload["category_id"], tx_payload["amount"], tx_payload["transaction_dt"])
     result = create_transaction(
         user_id=user_id, update_id=update_id,
-        payload={
-            "user_id": user_id, "type": "E", "amount": format(total, "f"),
-            "category_id": fallback_cat,
-            "description": f"{data.get('items', '-')} ({data.get('toko', 'Struk')})",
-            "transaction_dt": data.get("tanggal", datetime.now(TZ).strftime("%Y-%m-%d")),
-            "currency": "IDR",
-        },
+        payload=tx_payload,
         source="ocr",
     )
     if result.status == CreateTransactionStatus.ALREADY_EXISTS:
