@@ -388,8 +388,16 @@ def cmd_usage(chat_id):
 
 def cmd_status(chat_id, user_id):
     """Bot status — uses supabase_get"""
-    import time as tm
-    uptime = tm.strftime("%Hh %Mm", tm.gmtime(tm.time() - __import__('maskai.app').BOT_START_TIME))
+    import time as tm, os
+    # Use process start time from /proc
+    try:
+        pid = os.getpid()
+        proc_stat = open(f"/proc/{pid}/stat").read().split()
+        start_ticks = int(proc_stat[21])
+        uptime_sec = int(tm.time() - start_ticks / os.sysconf(os.sysconf_names['SC_CLK_TCK']))
+        uptime_str = f"{uptime_sec // 3600}h {(uptime_sec % 3600) // 60}m"
+    except Exception:
+        uptime_str = "?"
     db = {}
     labels = {"maskai_transactions":"TX","maskai_debts":"Hutang","maskai_keranjang":"Keranjang","maskai_categories":"Kat"}
     for t, lbl in labels.items():
@@ -398,4 +406,4 @@ def cmd_status(chat_id, user_id):
             db[lbl] = len(result.data) if isinstance(result.data, list) else "?"
         else:
             db[lbl] = f"err({result.status})"
-    send(chat_id, f"📌 <b>MASKAI Bot v2</b>\n✅ Aktif\n⏱ {uptime}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 <b>Database:</b>\n TX: {db.get('TX','?')} | Hutang: {db.get('Hutang','?')}\n Keranjang: {db.get('Keranjang','?')} | Kat: {db.get('Kat','?')}", parse_mode="HTML")
+    send(chat_id, f"📌 <b>MASKAI Bot v2</b>\n✅ Aktif\n⏱ {uptime_str}\n🧠 Teks: Claude Sonnet 4.5\n🖼 OCR: GPT-5.5\n\n💾 <b>Database:</b>\n TX: {db.get('TX','?')} | Hutang: {db.get('Hutang','?')}\n Keranjang: {db.get('Keranjang','?')} | Kat: {db.get('Kat','?')}", parse_mode="HTML")
