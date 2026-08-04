@@ -29,8 +29,9 @@ class TestDBConstraints(unittest.TestCase):
         self.assertIn("metadata", call_payload)
         self.assertEqual(call_payload["metadata"]["telegram_update_id"], "99999")
 
+    @patch('maskai.repositories.transaction_repository.supabase_get')
     @patch('maskai.repositories.transaction_repository.supabase_post')
-    def test_duplicate_still_23505(self, mock_post):
+    def test_duplicate_still_23505(self, mock_post, mock_get):
         """23505 duplicate violation still returns ALREADY_EXISTS"""
         from maskai.clients.http import ApiResult
         from maskai.repositories.transaction_repository import create_transaction, CreateTransactionStatus
@@ -39,6 +40,7 @@ class TestDBConstraints(unittest.TestCase):
             ok=False, status=409,
             data={"code": "23505", "message": "duplicate key value violates unique constraint uq_maskai_transactions_user_update"},
         )
+        mock_get.return_value = ApiResult(ok=True, data=[])
 
         result = create_transaction(
             user_id=1, update_id=88888,
