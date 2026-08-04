@@ -12,7 +12,7 @@ def claude(messages, max_tokens=500):
         r = requests.post(
             f"{config.DAHONO_URL}/chat/completions",
             json={
-                "model": "dahono/claude-sonnet-4.5-free",
+                "model": "dahono/claude-sonnet-5",
                 "messages": messages,
                 "max_tokens": max_tokens,
             },

@@ -162,6 +162,7 @@ def cmd_ocr(chat_id, user_id, file_id, update_id=None):
     elif result.status == CreateTransactionStatus.CREATED:
         send(chat_id, f"🛒 <b>{escape_html(data.get('toko','Struk'))}</b>\n💰 Rp {total:,.0f}\n📋 {escape_html(data.get('items','-'))}\n📅 {escape_html(data.get('tanggal','-'))}\n\n✅ Auto disimpan!", parse_mode="HTML")
     else:
+        log.error("Transaction save failed status=%s error=%s", result.status, getattr(result, 'error', '?'))
         send(chat_id, "❌ Gagal menyimpan transaksi.")
 
 
