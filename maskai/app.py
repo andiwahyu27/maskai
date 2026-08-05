@@ -146,11 +146,23 @@ def _cmd_sync(chat_id, user_id):
             send(chat_id, "❌ Tidak ada transaksi.")
             return
         sheet.clear()
-        sheet.append_row(["ID", "Tanggal", "Tipe", "Jumlah", "Kategori", "Deskripsi"])
+        sheet.append_row(["ID", "Tgl Transaksi", "Waktu", "Tgl Input", "Tipe", "Jumlah", "Kategori", "Deskripsi"])
         for t in txs:
             cat_name = escape_html(cats.get(t.get("category_id"), "Lainnya"))
+            tx_dt = t.get("transaction_dt", "")
+            # Split date and time: "2026-08-03" or "2026-08-03T14:30:00+07:00"
+            tx_date = ""
+            tx_time = ""
+            if tx_dt:
+                parts = tx_dt.split("T")
+                tx_date = parts[0]
+                if len(parts) > 1:
+                    tx_time = parts[1][:8]  # HH:MM:SS
+            created = t.get("created_at", "")
+            if created:
+                created = created[:19].replace("T", " ")  # "2026-08-05 14:30:00"
             sheet.append_row([
-                t["id"], t.get("transaction_dt", ""),
+                t["id"], tx_date, tx_time, created,
                 "Masuk" if t["type"] == "I" else "Keluar",
                 t["amount"], cat_name,
                 escape_html(t.get("description", "-"))
