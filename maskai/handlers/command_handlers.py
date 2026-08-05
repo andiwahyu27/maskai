@@ -128,8 +128,7 @@ def cmd_laporan(chat_id, user_id, text):
     for t in txs[:5]:
         dt = datetime.strptime(t["transaction_dt"][:10], "%Y-%m-%d")
         cat = cats.get(t.get("category_id"), "Lainnya")
-        label = "Pemasukan" if t["type"] == "I" else "Pengeluaran"
-        msg += f"\n📅 {dt.strftime('%d %b %Y')}\n📝 {escape_html(cat)} ({escape_html(label)})\n💵 Rp {t['amount']:,.0f}\n"
+        msg += f"\n📅 {dt.strftime('%d %b %Y')}\n📝 {escape_html(cat)}\n💵 Rp {t['amount']:,.0f}\n"
 
     send(chat_id, msg, parse_mode="HTML")
 
