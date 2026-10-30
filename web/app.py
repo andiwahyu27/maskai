@@ -423,4 +423,5 @@ def v1_tasks():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    # Hanya listen di localhost; akses publik lewat Caddy (bot.maskai.my.id).
+    app.run(host="127.0.0.1", port=5000, debug=False)
